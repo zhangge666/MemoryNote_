@@ -24,9 +24,3 @@ app.use(i18n);
 // 挂载应用
 app.mount('#app');
 
-// 开发环境日志
-if (import.meta.env.DEV) {
-  console.log('👋 MemoryNote - Renderer Process Started');
-  console.log('Vue version:', app.version);
-}
-

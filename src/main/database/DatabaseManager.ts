@@ -52,22 +52,15 @@ export class DatabaseManager implements IDatabaseManager {
    */
   async initialize(): Promise<void> {
     try {
-      console.log(`Initializing database at: ${this.dbPath}`);
-      
       // 创建数据库连接
-      this.db = new Database(this.dbPath, {
-        verbose: process.env.NODE_ENV === 'development' ? console.log : undefined,
-      });
+      this.db = new Database(this.dbPath);
 
       // 启用外键约束
       this.db.pragma('foreign_keys = ON');
       
       // 运行迁移
       await this.runMigrations();
-      
-      console.log('Database initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize database:', error);
       throw error;
     }
   }
@@ -94,13 +87,10 @@ export class DatabaseManager implements IDatabaseManager {
     const currentVersion = this.db.prepare('SELECT MAX(version) as version FROM _migrations').get() as { version: number | null };
     const version = currentVersion?.version || 0;
 
-    console.log(`Current database version: ${version}`);
-
     // 运行迁移
     const migrations = this.getMigrations();
     for (const migration of migrations) {
       if (migration.version > version) {
-        console.log(`Running migration ${migration.version}: ${migration.name}`);
         this.db.exec(migration.sql);
         this.db.prepare('INSERT INTO _migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
           migration.version,
@@ -204,6 +194,97 @@ export class DatabaseManager implements IDatabaseManager {
           CREATE INDEX IF NOT EXISTS idx_plugin_configs_plugin_id ON plugin_configs(plugin_id);
         `,
       },
+      {
+        version: 2,
+        name: 'note_management_tables',
+        sql: `
+          -- 笔记文件夹表
+          CREATE TABLE IF NOT EXISTS folders (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            parent_id TEXT,
+            path TEXT NOT NULL UNIQUE,
+            icon TEXT,
+            color TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+          );
+
+          -- 重建笔记表，使用 TEXT 类型 ID
+          DROP TABLE IF EXISTS notes;
+          CREATE TABLE notes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            file_path TEXT NOT NULL UNIQUE,
+            folder_id TEXT,
+            content TEXT,
+            excerpt TEXT,
+            is_pinned INTEGER DEFAULT 0,
+            is_archived INTEGER DEFAULT 0,
+            is_favorite INTEGER DEFAULT 0,
+            word_count INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            accessed_at INTEGER,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+          );
+
+          -- 重建标签表，使用 TEXT 类型 ID
+          DROP TABLE IF EXISTS tags;
+          CREATE TABLE tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT,
+            created_at INTEGER NOT NULL
+          );
+
+          -- 重建笔记-标签关联表
+          DROP TABLE IF EXISTS note_tags;
+          CREATE TABLE note_tags (
+            note_id TEXT NOT NULL,
+            tag_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (note_id, tag_id),
+            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+          );
+
+          -- 创建索引
+          CREATE INDEX IF NOT EXISTS idx_notes_folder_id ON notes(folder_id);
+          CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_notes_is_pinned ON notes(is_pinned);
+          CREATE INDEX IF NOT EXISTS idx_notes_is_archived ON notes(is_archived);
+          CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id);
+          CREATE INDEX IF NOT EXISTS idx_folders_path ON folders(path);
+
+          -- 全文搜索
+          CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+            title,
+            content,
+            content='notes',
+            content_rowid='rowid'
+          );
+
+          -- 触发器：插入笔记时同步到 FTS
+          CREATE TRIGGER IF NOT EXISTS notes_fts_insert AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts(rowid, title, content)
+            VALUES (NEW.rowid, NEW.title, NEW.content);
+          END;
+
+          -- 触发器：更新笔记时同步到 FTS
+          CREATE TRIGGER IF NOT EXISTS notes_fts_update AFTER UPDATE ON notes BEGIN
+            UPDATE notes_fts SET title = NEW.title, content = NEW.content
+            WHERE rowid = NEW.rowid;
+          END;
+
+          -- 触发器：删除笔记时同步到 FTS
+          CREATE TRIGGER IF NOT EXISTS notes_fts_delete AFTER DELETE ON notes BEGIN
+            DELETE FROM notes_fts WHERE rowid = OLD.rowid;
+          END;
+        `,
+      },
     ];
   }
 
@@ -219,7 +300,6 @@ export class DatabaseManager implements IDatabaseManager {
       const stmt = this.db.prepare(sql);
       return stmt.all(...params) as T[];
     } catch (error) {
-      console.error('Query error:', error, { sql, params });
       throw error;
     }
   }
@@ -237,7 +317,6 @@ export class DatabaseManager implements IDatabaseManager {
       const result = stmt.get(...params);
       return (result as T) || null;
     } catch (error) {
-      console.error('QueryOne error:', error, { sql, params });
       throw error;
     }
   }
@@ -258,7 +337,6 @@ export class DatabaseManager implements IDatabaseManager {
         lastID: result.lastInsertRowid as number,
       };
     } catch (error) {
-      console.error('Execute error:', error, { sql, params });
       throw error;
     }
   }
@@ -281,7 +359,6 @@ export class DatabaseManager implements IDatabaseManager {
     try {
       transaction();
     } catch (error) {
-      console.error('ExecuteBatch error:', error);
       throw error;
     }
   }
@@ -301,7 +378,6 @@ export class DatabaseManager implements IDatabaseManager {
     try {
       return transaction();
     } catch (error) {
-      console.error('Transaction error:', error);
       throw error;
     }
   }
@@ -313,7 +389,6 @@ export class DatabaseManager implements IDatabaseManager {
     if (this.db) {
       this.db.close();
       this.db = null;
-      console.log('Database closed');
     }
   }
 

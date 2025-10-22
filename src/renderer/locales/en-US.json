@@ -105,9 +105,20 @@
     "about": "About",
     "workspace": "Workspace",
     "language": "Language",
-    "theme": "Theme",
+    "keybindings": "Keybindings",
+    "theme": {
+      "title": "Theme Settings",
+      "description": "Choose your preferred theme appearance",
+      "options": "Theme Options",
+      "followSystem": "Follow System Theme",
+      "followSystemDesc": "Automatically switch between light and dark themes"
+    },
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "Auto",
     "fontSize": "Font Size",
     "fontFamily": "Font Family",
+    "autoSave": "Auto Save",
     "lineHeight": "Line Height",
     "tabSize": "Tab Size",
     "enableCodeHighlight": "Enable Code Highlight",
@@ -241,20 +252,6 @@
     "column2": "Column 2",
     "cell": "Cell"
   },
-  "settings": {
-    "general": "General",
-    "editor": "Editor",
-    "keybindings": "Keybindings",
-    "about": "About",
-    "language": "Language",
-    "theme": "Theme",
-    "themeLight": "Light",
-    "themeDark": "Dark",
-    "themeAuto": "Auto",
-    "fontSize": "Font Size",
-    "lineHeight": "Line Height",
-    "autoSave": "Auto Save"
-  },
   "tabs": {
     "closeTab": "Close Tab",
     "closeOthers": "Close Others",
@@ -264,6 +261,20 @@
     "pin": "Pin Tab",
     "unpin": "Unpin",
     "copyPath": "Copy Path"
+  },
+  "note": {
+    "newNote": "New Note",
+    "newFolder": "New Folder",
+    "refresh": "Refresh",
+    "searchPlaceholder": "Search notes...",
+    "emptyTree": "No notes yet",
+    "createFirstNote": "Create your first note",
+    "noSearchResults": "No matching notes found",
+    "words": "words",
+    "justNow": "Just now",
+    "minutesAgo": "minutes ago",
+    "hoursAgo": "hours ago",
+    "daysAgo": "days ago"
   }
 }
 

@@ -12,23 +12,41 @@
       <Navbar />
 
       <!-- 左侧栏 -->
-      <LeftSidebar />
+      <LeftSidebar>
+        <!-- 根据导航状态渲染不同内容 -->
+        <FileTree
+          v-if="navigationStore.activeView === 'notes'"
+          @select-note="handleSelectNote"
+          @create-note="handleCreateNote"
+          @create-folder="handleCreateFolder"
+        />
+        <div v-else class="sidebar-placeholder">
+          <h3 class="text-sm font-semibold mb-4">{{ t(`navbar.${navigationStore.activeView}`) }}</h3>
+          <p class="text-sm text-text-muted">此功能正在开发中...</p>
+        </div>
+      </LeftSidebar>
 
       <!-- 工作区 -->
       <div class="workspace flex-1 flex flex-col overflow-hidden bg-background relative">
+        <!-- 空状态 - 当没有标签页时显示 -->
+        <EmptyState v-if="tabStore.allTabs.length === 0" />
+        
         <!-- 标签页系统 -->
-        <SplitView
-          :layout="tabStore.layout"
-          :groups="tabStore.groups"
-          @tab-click="handleTabClick"
-          @tab-close="handleTabClose"
-          @close-others="handleCloseOthers"
-          @close-all="handleCloseAll"
-          @toggle-pin="handleTogglePin"
-          @tab-contextmenu="handleTabContextMenu"
-          @split-horizontal="handleSplitHorizontal"
-          @split-vertical="handleSplitVertical"
-        >
+          <SplitView
+            v-else
+            :layout="tabStore.layout"
+            :groups="tabStore.groups"
+            :active-group-id="tabStore.activeGroupId"
+            @tab-click="handleTabClick"
+            @tab-close="handleTabClose"
+            @close-others="handleCloseOthers"
+            @close-all="handleCloseAll"
+            @toggle-pin="handleTogglePin"
+            @tab-contextmenu="handleTabContextMenu"
+            @split-horizontal="handleSplitHorizontal"
+            @split-vertical="handleSplitVertical"
+            @group-activate="handleGroupActivate"
+          >
           <template #default="{ tab }">
             <slot :tab="tab">
               <!-- 默认内容渲染 -->
@@ -43,17 +61,38 @@
     </div>
 
     <!-- 状态栏 -->
-    <div class="statusbar h-7 bg-background-secondary border-t border-border px-4 flex items-center justify-between text-xs shadow-sm">
-      <div class="flex items-center gap-4">
-        <span class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-success"></span>
+    <div class="statusbar">
+      <div class="statusbar-section">
+        <span class="statusbar-item">
+          <svg class="statusbar-icon" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="3" fill="currentColor"/>
+          </svg>
           {{ t('statusbar.connected') }}
         </span>
-        <span>{{ t('statusbar.workspace') }}: workspace</span>
+        <span class="statusbar-divider"></span>
+        <span class="statusbar-item">
+          <svg class="statusbar-icon" viewBox="0 0 16 16" fill="none">
+            <path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          {{ t('statusbar.workspace') }}: workspace
+        </span>
       </div>
-      <div class="flex items-center gap-4">
-        <span>{{ t('statusbar.noteCount', { count: 0 }) }}</span>
-        <span>{{ t('statusbar.reviewCount', { count: 0 }) }}</span>
+      <div class="statusbar-section">
+        <span class="statusbar-item">
+          <svg class="statusbar-icon" viewBox="0 0 16 16" fill="none">
+            <path d="M3 2h10l-2 12H5L3 2z" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          {{ t('statusbar.noteCount', { count: 0 }) }}
+        </span>
+        <span class="statusbar-divider"></span>
+        <span class="statusbar-item">
+          <svg class="statusbar-icon" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          {{ t('statusbar.reviewCount', { count: 0 }) }}
+        </span>
       </div>
     </div>
 
@@ -72,8 +111,11 @@ import { useI18n } from 'vue-i18n';
 import { useSidebarStore } from '@renderer/stores/sidebar';
 import { useCommandStore } from '@renderer/stores/command';
 import { useTabStore } from '@renderer/stores/tab';
+import { useNavigationStore } from '@renderer/stores/navigation';
+import { useThemeStore } from '@renderer/stores/theme';
 import { getKeybindingService } from '@renderer/services/KeybindingService';
 import { registerDefaultCommands } from '@renderer/services/DefaultCommands';
+import { noteService } from '@renderer/services/NoteService';
 import Titlebar from './Titlebar.vue';
 import Navbar from './Navbar.vue';
 import LeftSidebar from './LeftSidebar.vue';
@@ -81,16 +123,21 @@ import RightSidebar from './RightSidebar.vue';
 import SplitView from '@renderer/components/tab/SplitView.vue';
 import CommandPalette from '@renderer/components/command/CommandPalette.vue';
 import NotificationContainer from '@renderer/components/notification/NotificationContainer.vue';
+import FileTree from '@renderer/components/note/FileTree.vue';
+import EmptyState from '@renderer/components/workspace/EmptyState.vue';
 import WelcomeView from '@renderer/views/WelcomeView.vue';
 import EditorView from '@renderer/views/EditorView.vue';
 import SettingsView from '@renderer/views/SettingsView.vue';
 import DevTestView from '@renderer/views/DevTestView.vue';
 import type { Tab } from '@shared/types/tab';
+import type { Note } from '@shared/types/note';
 
 const { t } = useI18n();
 const sidebarStore = useSidebarStore();
 const commandStore = useCommandStore();
 const tabStore = useTabStore();
+const navigationStore = useNavigationStore();
+const themeStore = useThemeStore();
 const keybindingService = getKeybindingService();
 
 // 标签页事件处理
@@ -169,6 +216,10 @@ function getTabComponent(tab: Tab): Component | ReturnType<typeof h> {
 
 // 加载配置和初始化
 onMounted(async () => {
+  // 初始化主题系统
+  await themeStore.initialize();
+  
+  // 加载侧边栏配置
   await sidebarStore.loadConfig();
   
   // 注册默认命令
@@ -178,17 +229,91 @@ onMounted(async () => {
   keybindingService.start();
   
   // 尝试加载上次的标签状态
-  const loaded = await tabStore.loadState();
+  await tabStore.loadState();
   
-  // 如果没有加载到状态或没有标签，打开欢迎标签
-  if (!loaded || tabStore.allTabs.length === 0) {
+  // 不再自动打开欢迎页面，让用户看到空状态
+});
+
+onUnmounted(() => {
+  // 停止快捷键监听
+  keybindingService.stop();
+});
+
+// 笔记相关处理
+async function handleSelectNote(note: Note) {
+  // 只在当前激活分区中检查是否已经打开该笔记
+  const activeGroup = tabStore.activeGroup;
+  
+  if (activeGroup) {
+    // 在当前激活分区中查找
+    const existingTab = activeGroup.tabs.find(tab => 
+      tab.type === 'editor' && tab.data?.noteId === note.id
+    );
+    
+    if (existingTab) {
+      // 在当前分区中已打开，激活它
+      tabStore.activateTab(existingTab.id);
+    } else {
+      // 在当前激活分区中打开新标签
+      tabStore.openTab({
+        title: note.title,
+        type: 'editor',
+        icon: '📝',
+        filePath: note.filePath,
+        data: {
+          noteId: note.id,
+          content: note.content || '',
+          filePath: note.filePath,
+        },
+      }, tabStore.activeGroupId!);  // 明确指定在当前激活分区中打开
+    }
+  } else {
+    // 如果没有激活分区，在默认分区打开
     tabStore.openTab({
-      title: '欢迎',
-      type: 'welcome',
-      icon: '👋',
+      title: note.title,
+      type: 'editor',
+      icon: '📝',
+      filePath: note.filePath,
+      data: {
+        noteId: note.id,
+        content: note.content || '',
+        filePath: note.filePath,
+      },
     });
   }
-});
+}
+
+async function handleCreateNote() {
+  try {
+    const note = await noteService.createNote({
+      title: '未命名笔记',
+      content: '',
+    });
+    
+    // 打开新笔记
+    handleSelectNote(note);
+  } catch (error) {
+    console.error('创建笔记失败:', error);
+  }
+}
+
+async function handleCreateFolder() {
+  try {
+    await noteService.createFolder({
+      name: '新文件夹',
+    });
+    
+    // TODO: 刷新文件树
+  } catch (error) {
+    console.error('创建文件夹失败:', error);
+  }
+}
+
+// 激活分组（当点击分区时）
+function handleGroupActivate(groupId: string) {
+  // 直接激活分组，不通过 tab（避免在同一个 tab 存在于多个分区时出现激活错误）
+  tabStore.activateGroup(groupId);
+}
 
 // 清理
 onUnmounted(() => {

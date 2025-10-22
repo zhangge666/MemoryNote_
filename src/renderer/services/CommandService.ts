@@ -49,19 +49,16 @@ export class CommandService implements ICommandService {
    */
   registerCommand(command: Command): void {
     if (this.commands.has(command.id)) {
-      console.warn(`Command ${command.id} is already registered. Overwriting...`);
+      // Command already registered, overwriting
     }
     this.commands.set(command.id, command);
-    console.log(`📝 Command registered: ${command.id} - ${command.title}`);
   }
 
   /**
    * 取消注册命令
    */
   unregisterCommand(commandId: string): void {
-    if (this.commands.delete(commandId)) {
-      console.log(`🗑️ Command unregistered: ${commandId}`);
-    }
+    this.commands.delete(commandId);
   }
 
   /**
@@ -70,21 +67,17 @@ export class CommandService implements ICommandService {
   async executeCommand(commandId: string, ...args: any[]): Promise<void> {
     const command = this.commands.get(commandId);
     if (!command) {
-      console.error(`Command not found: ${commandId}`);
       throw new Error(`Command not found: ${commandId}`);
     }
 
     // 检查上下文条件
     if (command.when && !this.evaluateWhen(command.when)) {
-      console.warn(`Command ${commandId} context condition not met: ${command.when}`);
       return;
     }
 
     try {
-      console.log(`⚡ Executing command: ${commandId}`, args);
       await command.handler(...args);
     } catch (error) {
-      console.error(`Error executing command ${commandId}:`, error);
       throw error;
     }
   }
@@ -171,7 +164,6 @@ export class CommandService implements ICommandService {
       // eslint-disable-next-line no-eval
       return eval(expr);
     } catch (error) {
-      console.error(`Error evaluating when expression: ${whenExpression}`, error);
       return false;
     }
   }

@@ -5,6 +5,7 @@
       <TabGroup
         v-if="groups[layout.groupId]"
         :group="groups[layout.groupId]"
+        :is-active="layout.groupId === activeGroupId"
         @tab-click="handleTabClick"
         @tab-close="handleTabClose"
         @close-others="handleCloseOthers"
@@ -13,6 +14,7 @@
         @tab-contextmenu="handleTabContextMenu"
         @split-horizontal="handleSplitHorizontal(layout.groupId)"
         @split-vertical="handleSplitVertical(layout.groupId)"
+        @group-activate="handleGroupActivate"
       >
         <template #content="{ tab }">
           <slot :tab="tab" />
@@ -30,6 +32,7 @@
           <SplitView
             :layout="child"
             :groups="groups"
+            :active-group-id="activeGroupId"
             @tab-click="handleTabClick"
             @tab-close="handleTabClose"
             @close-others="handleCloseOthers"
@@ -38,6 +41,7 @@
             @tab-contextmenu="handleTabContextMenu"
             @split-horizontal="handleSplitHorizontal"
             @split-vertical="handleSplitVertical"
+            @group-activate="handleGroupActivate"
           >
             <template #default="{ tab }">
               <slot :tab="tab" />
@@ -62,6 +66,7 @@
           <SplitView
             :layout="child"
             :groups="groups"
+            :active-group-id="activeGroupId"
             @tab-click="handleTabClick"
             @tab-close="handleTabClose"
             @close-others="handleCloseOthers"
@@ -70,6 +75,7 @@
             @tab-contextmenu="handleTabContextMenu"
             @split-horizontal="handleSplitHorizontal"
             @split-vertical="handleSplitVertical"
+            @group-activate="handleGroupActivate"
           >
             <template #default="{ tab }">
               <slot :tab="tab" />
@@ -95,6 +101,7 @@ import type { SplitLayout, TabGroup as ITabGroup, Tab } from '@shared/types/tab'
 const props = defineProps<{
   layout: SplitLayout;
   groups: Record<string, ITabGroup>;
+  activeGroupId?: string | null;  // 添加活动分组ID
 }>();
 
 const emit = defineEmits<{
@@ -107,6 +114,7 @@ const emit = defineEmits<{
   (e: 'split-horizontal', groupId: string): void;
   (e: 'split-vertical', groupId: string): void;
   (e: 'resize', layoutPath: number[], ratio: number): void;
+  (e: 'group-activate', groupId: string): void;  // 新增：激活分组事件
 }>();
 
 const paneRatios = ref<number[]>([]);
@@ -183,6 +191,10 @@ function handleSplitHorizontal(groupId: string) {
 
 function handleSplitVertical(groupId: string) {
   emit('split-vertical', groupId);
+}
+
+function handleGroupActivate(groupId: string) {
+  emit('group-activate', groupId);
 }
 </script>
 

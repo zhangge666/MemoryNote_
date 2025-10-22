@@ -3,7 +3,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { getTabService } from '@renderer/services/TabService';
 import type { Tab, TabGroup, TabSystemState } from '@shared/types/tab';
 
@@ -65,6 +65,10 @@ export const useTabStore = defineStore('tab', () => {
     tabService.activateTab(tabId);
   }
 
+  function activateGroup(groupId: string) {
+    tabService.activateGroup(groupId);
+  }
+
   // ========== Actions - 标签组操作 ==========
   function createGroup() {
     return tabService.createGroup();
@@ -116,44 +120,66 @@ export const useTabStore = defineStore('tab', () => {
   // ========== Actions - 持久化 ==========
   async function saveState() {
     const state = getState();
-    const { useIPC } = await import('@renderer/composables/useIPC');
-    const { IPCChannel } = await import('@shared/interfaces/ipc');
-    const ipc = useIPC();
     
     try {
-      // 序列化状态
-      const serializedState = {
+      // 将响应式对象转换为普通对象（移除 Vue 的 Proxy）
+      const serializedState = JSON.parse(JSON.stringify({
         groups: state.groups,
         layout: state.layout,
         activeGroupId: state.activeGroupId,
-      };
+      }));
       
-      await ipc.invoke(IPCChannel.CONFIG_SET, 'tabSystemState' as any, serializedState);
-      console.log('💾 Tab state saved', serializedState);
+      console.log('🔄 Saving tab state:', serializedState);
+      
+      // 直接使用 window.electronAPI
+      if (window.electronAPI) {
+        const result = await window.electronAPI.invoke('config:set', 'tabSystemState', serializedState);
+        console.log('✅ Tab state saved, result:', result);
+      } else {
+        console.error('❌ electronAPI not available');
+      }
     } catch (error) {
-      console.error('Failed to save tab state:', error);
+      console.error('❌ Failed to save tab state:', error);
     }
   }
 
   async function loadState() {
-    const { useIPC } = await import('@renderer/composables/useIPC');
-    const { IPCChannel } = await import('@shared/interfaces/ipc');
-    const ipc = useIPC();
-    
     try {
-      const savedState = await ipc.invoke(IPCChannel.CONFIG_GET, 'tabSystemState' as any);
+      console.log('🔄 Loading tab state...');
       
-      if (savedState) {
-        restoreState(savedState as TabSystemState);
-        console.log('📂 Tab state loaded', savedState);
-        return true;
+      // 直接使用 window.electronAPI
+      if (window.electronAPI) {
+        const savedState = await window.electronAPI.invoke('config:get', 'tabSystemState');
+        console.log('📦 Loaded tab state:', savedState);
+        
+        if (savedState) {
+          restoreState(savedState as TabSystemState);
+          console.log('✅ Tab state restored successfully');
+          return true;
+        } else {
+          console.log('ℹ️ No saved tab state found');
+        }
+      } else {
+        console.error('❌ electronAPI not available');
       }
     } catch (error) {
-      console.error('Failed to load tab state:', error);
+      console.error('❌ Failed to load tab state:', error);
     }
     
     return false;
   }
+
+  // 监听状态变化，立即保存（无防抖）
+  watch(
+    () => JSON.stringify({ groups: state.groups, layout: state.layout, activeGroupId: state.activeGroupId }),
+    (newVal, oldVal) => {
+      // 跳过初始加载
+      if (oldVal === undefined) return;
+      
+      console.log('🔔 Tab state changed, saving immediately...');
+      saveState();
+    }
+  );
 
   return {
     // State
@@ -173,6 +199,7 @@ export const useTabStore = defineStore('tab', () => {
     setTabDirty,
     toggleTabPin,
     activateTab,
+    activateGroup,
     createGroup,
     deleteGroup,
     moveTabToGroup,

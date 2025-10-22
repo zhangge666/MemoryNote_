@@ -29,8 +29,6 @@ export function registerDefaultCommands(): void {
       });
     }
   });
-
-  console.log('✅ Default commands registered');
 }
 
 /**
@@ -76,7 +74,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.FILE,
     keybinding: 'Ctrl+N',
     handler: () => {
-      console.log('Create new note');
       // TODO: 实现新建笔记功能
     },
   },
@@ -87,7 +84,6 @@ const DEFAULT_COMMANDS: Command[] = [
     keybinding: 'Ctrl+S',
     when: 'editorFocus',
     handler: () => {
-      console.log('Save note');
       // TODO: 实现保存笔记功能
     },
   },
@@ -98,7 +94,6 @@ const DEFAULT_COMMANDS: Command[] = [
     keybinding: 'Ctrl+W',
     when: 'activeNote',
     handler: () => {
-      console.log('Close note');
       // TODO: 实现关闭笔记功能
     },
   },
@@ -169,7 +164,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.EDIT,
     keybinding: 'Ctrl+F',
     handler: () => {
-      console.log('Find');
       // TODO: 实现查找功能
     },
   },
@@ -180,7 +174,6 @@ const DEFAULT_COMMANDS: Command[] = [
     keybinding: 'Ctrl+H',
     when: 'editorFocus',
     handler: () => {
-      console.log('Replace');
       // TODO: 实现替换功能
     },
   },
@@ -192,7 +185,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.NAVIGATION,
     keybinding: 'Ctrl+1',
     handler: () => {
-      console.log('Go to notes');
       // TODO: 实现导航到笔记功能
     },
   },
@@ -202,7 +194,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.NAVIGATION,
     keybinding: 'Ctrl+2',
     handler: () => {
-      console.log('Go to journal');
       // TODO: 实现导航到日志功能
     },
   },
@@ -212,7 +203,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.NAVIGATION,
     keybinding: 'Ctrl+3',
     handler: () => {
-      console.log('Go to review');
       // TODO: 实现导航到复习功能
     },
   },
@@ -222,7 +212,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.NAVIGATION,
     keybinding: 'Ctrl+4',
     handler: () => {
-      console.log('Go to search');
       // TODO: 实现导航到搜索功能
     },
   },
@@ -234,7 +223,6 @@ const DEFAULT_COMMANDS: Command[] = [
     category: CommandCategory.SEARCH,
     keybinding: 'Ctrl+Shift+F',
     handler: () => {
-      console.log('Global search');
       // TODO: 实现全局搜索功能
     },
   },
@@ -260,7 +248,7 @@ const DEFAULT_COMMANDS: Command[] = [
         try {
           await window.electronAPI.invoke('toggle-dev-tools');
         } catch (error) {
-          console.error('Failed to toggle dev tools:', error);
+          // Failed to toggle dev tools
         }
       }
     },
@@ -325,14 +313,13 @@ const DEFAULT_COMMANDS: Command[] = [
             label: '查看',
             primary: true,
             handler: () => {
-              console.log('查看消息');
               notificationStore.success('已打开消息');
             },
           },
           {
             label: '忽略',
             handler: () => {
-              console.log('忽略消息');
+              // Ignore message
             },
           },
         ],

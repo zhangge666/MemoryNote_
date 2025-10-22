@@ -10,6 +10,9 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: './resources/icon.png', // 应用程序图标
+    name: 'MemoryNote',
+    executableName: 'MemoryNote',
   },
   rebuildConfig: {},
   makers: [
@@ -25,12 +28,12 @@ const config: ForgeConfig = {
       build: [
         {
           // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
-          entry: 'src/main/index.ts',
+          entry: 'src/main.ts',
           config: 'vite.main.config.ts',
           target: 'main',
         },
         {
-          entry: 'src/preload/index.ts',
+          entry: 'src/preload.ts',
           config: 'vite.preload.config.ts',
           target: 'preload',
         },

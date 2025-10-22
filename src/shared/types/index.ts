@@ -58,6 +58,7 @@ export interface UserConfig {
   window: WindowConfig;
   editor: EditorConfig;
   review: ReviewConfig;
+  [key: string]: any; // 允许动态配置项（如 sidebar, tabSystemState 等）
 }
 
 // ==================== 笔记相关 ====================

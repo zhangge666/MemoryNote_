@@ -1,24 +1,12 @@
 <template>
   <div class="titlebar titlebar-drag flex items-center justify-between px-4 flex-shrink-0">
     <!-- 左侧：Logo + 应用名 + 侧边栏控制 -->
-    <div class="flex items-center gap-3 titlebar-no-drag">
+    <div class="flex items-center gap-3 titlebar-no-drag ml-2">
       <!-- App Icon -->
-      <div class="app-icon w-7 h-7 flex items-center justify-center flex-shrink-0">
-        <svg class="w-6 h-6" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- 外层框架 -->
-          <rect x="4" y="8" width="24" height="16" rx="2" stroke="url(#iconGradient)" stroke-width="2" fill="none"/>
-          <!-- 内部装饰 -->
-          <path d="M10 14L16 18L22 14" stroke="url(#iconGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="16" cy="16" r="2" fill="url(#iconGradient)"/>
-          <defs>
-            <linearGradient id="iconGradient" x1="4" y1="8" x2="28" y2="24" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#667eea"/>
-              <stop offset="100%" stop-color="#764ba2"/>
-            </linearGradient>
-          </defs>
-        </svg>
+      <div class="app-icon flex items-center justify-center flex-shrink-0">
+        <img src="/icon.svg" alt="Memory Note" class="app-icon-img" />
       </div>
-      <span class="text-sm font-semibold whitespace-nowrap text-text mr-2">{{ t('app.name') }}</span>
+      <span class="app-name text-sm font-semibold whitespace-nowrap text-text mr-2 ml-4">{{ t('app.name') }}</span>
       
       <button 
         @click="toggleLeftSidebar"
@@ -134,18 +122,6 @@ onUnmounted(() => {
 </script>
 
 <style>
-/* App Icon */
-.app-icon {
-  transition: all 0.3s ease;
-}
-
-.app-icon:hover {
-  transform: scale(1.1);
-}
-
-.app-icon svg {
-  filter: drop-shadow(0 2px 4px rgba(102, 126, 234, 0.4));
-}
 
 /* Window buttons */
 .window-btn {
@@ -171,6 +147,46 @@ onUnmounted(() => {
 .titlebar button svg {
   flex-shrink: 0 !important;
   display: block !important;
+}
+
+/* 应用图标样式 */
+.app-icon {
+  width: 24px;
+  height: 24px;
+  margin-left: 12px;
+  transition: all 0.2s ease;
+}
+
+.app-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* 根据主题调整图标显示效果 */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15)) brightness(0.95);
+  opacity: 0.9;
+  transition: all 0.2s ease;
+}
+
+/* 深色主题下增强图标亮度和对比度 */
+:root[data-theme="dark"] .app-icon-img {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)) brightness(1.15) contrast(1.1);
+  opacity: 0.95;
+}
+
+.app-icon:hover .app-icon-img {
+  opacity: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)) brightness(1.05);
+}
+
+:root[data-theme="dark"] .app-icon:hover .app-icon-img {
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)) brightness(1.25) contrast(1.15);
+}
+
+/* 应用名称样式 */
+.app-name {
+  user-select: none;
+  -webkit-user-select: none;
+  margin-left: 8px !important;
 }
 </style>
 

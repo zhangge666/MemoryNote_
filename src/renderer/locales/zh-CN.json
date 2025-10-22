@@ -105,9 +105,20 @@
     "about": "关于",
     "workspace": "工作目录",
     "language": "语言",
-    "theme": "主题",
+    "keybindings": "快捷键",
+    "theme": {
+      "title": "主题设置",
+      "description": "选择您喜欢的主题外观",
+      "options": "主题选项",
+      "followSystem": "跟随系统主题",
+      "followSystemDesc": "自动切换亮色或暗色主题"
+    },
+    "themeLight": "亮色",
+    "themeDark": "暗色",
+    "themeAuto": "自动",
     "fontSize": "字体大小",
     "fontFamily": "字体",
+    "autoSave": "自动保存",
     "lineHeight": "行高",
     "tabSize": "缩进大小",
     "enableCodeHighlight": "启用代码高亮",
@@ -241,20 +252,6 @@
     "column2": "列2",
     "cell": "单元格"
   },
-  "settings": {
-    "general": "通用",
-    "editor": "编辑器",
-    "keybindings": "快捷键",
-    "about": "关于",
-    "language": "语言",
-    "theme": "主题",
-    "themeLight": "浅色",
-    "themeDark": "深色",
-    "themeAuto": "自动",
-    "fontSize": "字体大小",
-    "lineHeight": "行高",
-    "autoSave": "自动保存"
-  },
   "tabs": {
     "closeTab": "关闭标签",
     "closeOthers": "关闭其他标签",
@@ -264,6 +261,20 @@
     "pin": "固定标签",
     "unpin": "取消固定",
     "copyPath": "复制路径"
+  },
+  "note": {
+    "newNote": "新建笔记",
+    "newFolder": "新建文件夹",
+    "refresh": "刷新",
+    "searchPlaceholder": "搜索笔记...",
+    "emptyTree": "还没有笔记",
+    "createFirstNote": "创建第一个笔记",
+    "noSearchResults": "没有找到匹配的笔记",
+    "words": "字",
+    "justNow": "刚刚",
+    "minutesAgo": "分钟前",
+    "hoursAgo": "小时前",
+    "daysAgo": "天前"
   }
 }
 

@@ -3,7 +3,7 @@
   "productName": "memorynote",
   "version": "1.0.0",
   "description": "A personal knowledge base application with note-taking, review system, and AI-powered features",
-  "main": ".vite/build/index.js",
+  "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",

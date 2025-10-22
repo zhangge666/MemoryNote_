@@ -5,6 +5,7 @@ import path from 'path';
 // https://vitejs.dev/config
 export default defineConfig({
   plugins: [vue()],
+  publicDir: 'public', // 指定 public 目录
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

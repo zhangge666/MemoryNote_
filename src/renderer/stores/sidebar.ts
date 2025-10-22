@@ -167,10 +167,9 @@ export const useSidebarStore = defineStore('sidebar', () => {
       const config = await ipc.invoke<SidebarConfig>(IPCChannel.CONFIG_GET, 'sidebar');
       if (config) {
         applyConfig(config);
-        console.log('📂 Sidebar config loaded:', config);
       }
     } catch (error) {
-      console.warn('⚠️ Failed to load sidebar config, using defaults:', error);
+      // Failed to load sidebar config, using defaults
     }
   };
 
@@ -184,9 +183,8 @@ export const useSidebarStore = defineStore('sidebar', () => {
       try {
         const config = getConfig();
         await ipc.invoke(IPCChannel.CONFIG_SET, 'sidebar', config);
-        console.log('💾 Sidebar config saved:', config);
       } catch (error) {
-        console.error('❌ Failed to save sidebar config:', error);
+        // Failed to save sidebar config
       }
     }, 100); // 100ms 防抖
   };

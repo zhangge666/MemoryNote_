@@ -31,6 +31,9 @@ export interface ITabService {
   /** 激活标签页 */
   activateTab(tabId: string): void;
 
+  /** 激活分组（直接激活分组，不通过 tab） */
+  activateGroup(groupId: string): void;
+
   /** 获取激活的标签页 */
   getActiveTab(groupId?: string): Tab | null;
 
@@ -88,9 +91,13 @@ export class TabService implements ITabService {
    * 打开标签页
    */
   openTab(tab: Omit<Tab, 'id' | 'isDirty' | 'isPinned'>, groupId?: string): string {
-    const targetGroupId = groupId || this.state.activeGroupId;
-    if (!targetGroupId) {
-      throw new Error('No active group');
+    let targetGroupId = groupId || this.state.activeGroupId;
+    
+    // 如果没有活动组，创建一个默认组
+    if (!targetGroupId || !this.state.groups[targetGroupId]) {
+      targetGroupId = this.createGroup();
+      this.state.layout = { type: 'single', groupId: targetGroupId };
+      this.state.activeGroupId = targetGroupId;
     }
 
     const group = this.state.groups[targetGroupId];
@@ -98,9 +105,9 @@ export class TabService implements ITabService {
       throw new Error(`Group ${targetGroupId} not found`);
     }
 
-    // 如果已存在相同路径的标签，激活它
+    // 只在当前分区中检查是否已存在相同路径的标签
     if (tab.filePath) {
-      const existingTab = this.findTabByPath(tab.filePath);
+      const existingTab = group.tabs.find(t => t.filePath === tab.filePath);
       if (existingTab) {
         this.activateTab(existingTab.id);
         return existingTab.id;
@@ -120,9 +127,10 @@ export class TabService implements ITabService {
     };
 
     group.tabs.push(newTab);
-    group.activeTabId = newTab.id;
+    
+    // 使用 activateTab 来正确设置激活状态（包括全局的 activeGroupId）
+    this.activateTab(newTab.id);
 
-    console.log(`📄 Tab opened: ${newTab.title} (${newTab.id})`);
     return newTab.id;
   }
 
@@ -136,7 +144,6 @@ export class TabService implements ITabService {
     // 如果有未保存的修改，需要确认
     if (tab.isDirty) {
       // TODO: 显示确认对话框
-      console.warn(`Tab ${tabId} has unsaved changes`);
     }
 
     const group = this.findGroupByTabId(tabId);
@@ -165,7 +172,6 @@ export class TabService implements ITabService {
       this.removeEmptyGroup(groupId);
     }
 
-    console.log(`🗑️ Tab closed: ${tabId}`);
     return true;
   }
 
@@ -178,8 +184,24 @@ export class TabService implements ITabService {
 
     // 调整布局
     this.removeGroupFromLayout(this.state.layout, groupId);
+  }
 
-    console.log(`🗑️ Empty group removed: ${groupId}`);
+  /**
+   * 在布局中查找第一个可用的分组ID
+   */
+  private findFirstGroupInLayout(layout: SplitLayout): string | null {
+    if (layout.type === 'single' && layout.groupId) {
+      return layout.groupId;
+    }
+    
+    if (layout.children && layout.children.length > 0) {
+      for (const child of layout.children) {
+        const groupId = this.findFirstGroupInLayout(child);
+        if (groupId) return groupId;
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -223,6 +245,17 @@ export class TabService implements ITabService {
           layout.groupId = remainingChild.groupId;
           layout.children = remainingChild.children;
           layout.ratio = remainingChild.ratio;
+          
+          // 激活剩余的分区
+          if (remainingChild.groupId) {
+            this.state.activeGroupId = remainingChild.groupId;
+          }
+        } else if (layout.children.length > 0) {
+          // 如果还有多个子布局，激活第一个可用的分区
+          const firstAvailableGroup = this.findFirstGroupInLayout(layout);
+          if (firstAvailableGroup) {
+            this.state.activeGroupId = firstAvailableGroup;
+          }
         }
 
         return true;
@@ -253,12 +286,10 @@ export class TabService implements ITabService {
     const dirtyTabs = group.tabs.filter((t) => t.isDirty);
     if (dirtyTabs.length > 0) {
       // TODO: 显示批量确认对话框
-      console.warn(`${dirtyTabs.length} tabs have unsaved changes`);
     }
 
     group.tabs = [];
     group.activeTabId = null;
-    console.log(`🗑️ All tabs closed in group: ${targetGroupId}`);
   }
 
   /**
@@ -275,12 +306,10 @@ export class TabService implements ITabService {
     const dirtyTabs = group.tabs.filter((t) => t.id !== tabId && t.isDirty);
     if (dirtyTabs.length > 0) {
       // TODO: 显示批量确认对话框
-      console.warn(`${dirtyTabs.length} tabs have unsaved changes`);
     }
 
     group.tabs = [targetTab];
     group.activeTabId = tabId;
-    console.log(`🗑️ Other tabs closed except: ${tabId}`);
   }
 
   /**
@@ -298,11 +327,9 @@ export class TabService implements ITabService {
 
     if (dirtyTabs.length > 0) {
       // TODO: 显示批量确认对话框
-      console.warn(`${dirtyTabs.length} tabs have unsaved changes`);
     }
 
     group.tabs = group.tabs.slice(0, tabIndex + 1);
-    console.log(`🗑️ Tabs to the right closed: ${tabId}`);
   }
 
   /**
@@ -322,7 +349,6 @@ export class TabService implements ITabService {
     const tab = this.findTabById(tabId);
     if (tab) {
       tab.isPinned = !tab.isPinned;
-      console.log(`📌 Tab ${tabId} pinned: ${tab.isPinned}`);
     }
   }
 
@@ -334,7 +360,17 @@ export class TabService implements ITabService {
     if (group) {
       group.activeTabId = tabId;
       this.state.activeGroupId = group.id;
-      console.log(`✨ Tab activated: ${tabId}`);
+    }
+  }
+
+  /**
+   * 激活分组（直接激活分组，不通过 tab）
+   * 这个方法用于处理点击分区时的激活，避免在同一个 tab 存在于多个分区时出现激活错误
+   */
+  activateGroup(groupId: string): void {
+    const group = this.state.groups[groupId];
+    if (group) {
+      this.state.activeGroupId = groupId;
     }
   }
 
@@ -361,7 +397,6 @@ export class TabService implements ITabService {
       tabs: [],
       activeTabId: null,
     };
-    console.log(`➕ Group created: ${groupId}`);
     return groupId;
   }
 
@@ -371,7 +406,6 @@ export class TabService implements ITabService {
   deleteGroup(groupId: string): void {
     if (this.state.groups[groupId]) {
       delete this.state.groups[groupId];
-      console.log(`🗑️ Group deleted: ${groupId}`);
     }
   }
 
@@ -395,8 +429,6 @@ export class TabService implements ITabService {
     if (sourceGroup.tabs.length > 0 && sourceGroup.activeTabId === tabId) {
       sourceGroup.activeTabId = sourceGroup.tabs[0].id;
     }
-
-    console.log(`🔄 Tab moved: ${tabId} -> ${targetGroupId}`);
   }
 
   /**
@@ -451,7 +483,6 @@ export class TabService implements ITabService {
     }
     
     this.state.activeGroupId = newGroupId;
-    console.log(`↔️ Horizontal split created`);
   }
 
   /**
@@ -506,7 +537,6 @@ export class TabService implements ITabService {
     }
     
     this.state.activeGroupId = newGroupId;
-    console.log(`↕️ Vertical split created`);
   }
 
   /**
@@ -550,7 +580,6 @@ export class TabService implements ITabService {
   unsplit(groupId: string): void {
     // 简化实现：重置为单一布局
     this.state.layout = { type: 'single', groupId };
-    console.log(`🔲 Split cancelled, back to single layout`);
   }
 
   /**
@@ -571,7 +600,17 @@ export class TabService implements ITabService {
     this.state.groups = { ...state.groups };
     this.state.layout = { ...state.layout };
     this.state.activeGroupId = state.activeGroupId;
-    console.log('🔄 Tab system state restored');
+    
+    // 确保至少有一个组
+    if (Object.keys(this.state.groups).length === 0) {
+      const defaultGroupId = this.createGroup();
+      this.state.layout = { type: 'single', groupId: defaultGroupId };
+      this.state.activeGroupId = defaultGroupId;
+    } else if (!this.state.activeGroupId || !this.state.groups[this.state.activeGroupId]) {
+      // 如果没有有效的活动组，使用第一个组
+      const firstGroupId = Object.keys(this.state.groups)[0];
+      this.state.activeGroupId = firstGroupId;
+    }
   }
 
   /**

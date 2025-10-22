@@ -27,6 +27,7 @@ export const registerConfigHandlers = () => {
     try {
       const service = await initConfigService();
       const value = service.get(key as any);
+      console.log(`[ConfigService] GET "${key}":`, value);
       return value;
     } catch (error) {
       console.error(`Failed to get config "${key}":`, error);
@@ -49,8 +50,10 @@ export const registerConfigHandlers = () => {
   ipcMain.handle(IPCChannel.CONFIG_SET, async (_event, key: string, value: unknown) => {
     try {
       const service = await initConfigService();
+      console.log(`[ConfigService] SET "${key}":`, JSON.stringify(value).substring(0, 200));
       service.set(key as any, value as any);
       await service.save();
+      console.log(`[ConfigService] Config saved successfully`);
       return true;
     } catch (error) {
       console.error(`Failed to set config "${key}":`, error);

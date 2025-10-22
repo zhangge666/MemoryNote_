@@ -7,7 +7,7 @@
         :key="item.id"
         :icon="item.icon"
         :title="t(`navbar.${item.id}`)"
-        :active="activeView === item.id"
+        :active="navigationStore.activeView === item.id"
         @click="selectView(item.id)"
       />
     </div>
@@ -19,7 +19,7 @@
         :key="item.id"
         :icon="item.icon"
         :title="t(`navbar.${item.id}`)"
-        :active="activeView === item.id"
+        :active="navigationStore.activeView === item.id"
         @click="selectView(item.id)"
       />
     </div>
@@ -27,14 +27,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useTabStore } from '@renderer/stores/tab';
+import { useNavigationStore } from '@renderer/stores/navigation';
+import { useSidebarStore } from '@renderer/stores/sidebar';
 import NavButton from './NavButton.vue';
 
 const { t } = useI18n();
-const activeView = ref('notes');
 const tabStore = useTabStore();
+const navigationStore = useNavigationStore();
+const sidebarStore = useSidebarStore();
 
 const topItems = [
   { id: 'notes', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -51,7 +53,12 @@ const bottomItems = [
 ];
 
 const selectView = (viewId: string) => {
-  activeView.value = viewId;
+  navigationStore.setActiveView(viewId as any);
+  
+  // 确保左侧栏可见
+  if (!sidebarStore.leftVisible) {
+    sidebarStore.toggleLeft();
+  }
   
   // 根据导航项打开对应的标签页
   const tabConfig: Record<string, { title: string; type: 'editor' | 'plugin' | 'settings' | 'welcome'; icon?: string }> = {
@@ -67,11 +74,21 @@ const selectView = (viewId: string) => {
 
   const config = tabConfig[viewId];
   if (config) {
-    // 检查是否已经存在该标签
-    const existingTab = tabStore.allTabs.find(tab => tab.title === config.title && tab.type === config.type);
-    if (existingTab) {
-      tabStore.activateTab(existingTab.id);
+    // 只在当前激活分区中检查是否已经存在该标签
+    const activeGroup = tabStore.activeGroup;
+    
+    if (activeGroup) {
+      // 在当前激活分区中查找
+      const existingTab = activeGroup.tabs.find(tab => tab.title === config.title && tab.type === config.type);
+      if (existingTab) {
+        // 在当前分区中已打开，激活它
+        tabStore.activateTab(existingTab.id);
+      } else {
+        // 在当前激活分区中打开新标签
+        tabStore.openTab(config, tabStore.activeGroupId!);
+      }
     } else {
+      // 如果没有激活分区，在默认分区打开
       tabStore.openTab(config);
     }
   }

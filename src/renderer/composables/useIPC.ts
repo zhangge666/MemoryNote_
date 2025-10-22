@@ -22,8 +22,6 @@ export interface IIPCBridge {
 export function useIPC(): IIPCBridge {
   // 检查 Electron API 是否可用
   if (typeof window === 'undefined' || !window.electronAPI) {
-    console.warn('Electron API not available. Running in browser mode?');
-    
     // 返回模拟实现（用于开发/测试）
     return {
       async invoke<T = unknown>(): Promise<IPCResponse<T>> {
@@ -55,7 +53,6 @@ export function useIPC(): IIPCBridge {
       try {
         return await window.electronAPI.invoke<T>(channel, ...args);
       } catch (error) {
-        console.error(`IPC invoke error [${channel}]:`, error);
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error',

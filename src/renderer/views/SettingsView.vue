@@ -29,14 +29,13 @@
             </select>
           </div>
           <div class="setting-item">
-            <label class="setting-label">{{ t('settings.theme') }}</label>
-            <select class="setting-select">
-              <option value="light">{{ t('settings.themeLight') }}</option>
-              <option value="dark">{{ t('settings.themeDark') }}</option>
-              <option value="auto">{{ t('settings.themeAuto') }}</option>
-            </select>
+            <label class="setting-label">{{ t('settings.workspace') }}</label>
+            <input type="text" class="setting-input" value="~/Documents/MemoryNote" readonly />
           </div>
         </div>
+
+        <!-- 主题设置 -->
+        <ThemeSettings v-if="activeCategory === 'themes'" />
 
         <!-- 编辑器设置 -->
         <div v-else-if="activeCategory === 'editor'" class="settings-section">
@@ -77,12 +76,14 @@
 import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import KeybindingSettings from '@renderer/components/settings/KeybindingSettings.vue';
+import ThemeSettings from '@renderer/components/settings/ThemeSettings.vue';
 
 const { t } = useI18n();
 const activeCategory = ref('general');
 
 const categories = [
   { id: 'general', icon: '🌐', label: 'settings.general' },
+  { id: 'themes', icon: '🎨', label: 'settings.themes' },
   { id: 'editor', icon: '✏️', label: 'settings.editor' },
   { id: 'keybindings', icon: '⌨️', label: 'settings.keybindings' },
   { id: 'about', icon: 'ℹ️', label: 'settings.about' },

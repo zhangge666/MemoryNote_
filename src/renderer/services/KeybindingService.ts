@@ -43,10 +43,9 @@ export class KeybindingService implements IKeybindingService {
   registerKeybinding(keybinding: Keybinding): void {
     const normalizedKey = this.normalizeKey(keybinding.key);
     if (this.keybindings.has(normalizedKey)) {
-      console.warn(`Keybinding ${normalizedKey} is already registered. Overwriting...`);
+      // Keybinding already registered, overwriting
     }
     this.keybindings.set(normalizedKey, { ...keybinding, key: normalizedKey });
-    console.log(`⌨️ Keybinding registered: ${normalizedKey} -> ${keybinding.command}`);
   }
 
   /**
@@ -54,9 +53,7 @@ export class KeybindingService implements IKeybindingService {
    */
   unregisterKeybinding(key: string): void {
     const normalizedKey = this.normalizeKey(key);
-    if (this.keybindings.delete(normalizedKey)) {
-      console.log(`🗑️ Keybinding unregistered: ${normalizedKey}`);
-    }
+    this.keybindings.delete(normalizedKey);
   }
 
   /**
@@ -95,7 +92,6 @@ export class KeybindingService implements IKeybindingService {
     this.boundHandler = this.handleKeyEvent.bind(this);
     window.addEventListener('keydown', this.boundHandler, true);
     this.listening = true;
-    console.log('⌨️ Keybinding service started');
   }
 
   /**
@@ -107,7 +103,6 @@ export class KeybindingService implements IKeybindingService {
     window.removeEventListener('keydown', this.boundHandler, true);
     this.boundHandler = null;
     this.listening = false;
-    console.log('⌨️ Keybinding service stopped');
   }
 
   /**
@@ -143,8 +138,8 @@ export class KeybindingService implements IKeybindingService {
     event.stopPropagation();
 
     // 执行命令
-    commandService.executeCommand(binding.command).catch((error) => {
-      console.error(`Failed to execute command ${binding.command}:`, error);
+    commandService.executeCommand(binding.command).catch(() => {
+      // Command execution failed
     });
 
     return true;
