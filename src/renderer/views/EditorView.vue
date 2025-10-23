@@ -13,6 +13,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { useTabStore } from '@renderer/stores/tab';
+import { noteService } from '@renderer/services/NoteService';
 import MarkdownEditor from '@renderer/components/editor/MarkdownEditor.vue';
 import type { Tab } from '@shared/types/tab';
 
@@ -43,14 +44,33 @@ function handleChange(newContent: string) {
   content.value = newContent;
   
   // 自动保存逻辑
-  // TODO: 实现自动保存到文件系统
+  // TODO: 实现自动保存到文件系统（可以加个防抖）
   console.log('Content changed, auto-save...');
 }
 
-function handleSave() {
-  console.log('Save:', content.value);
-  // TODO: 保存到文件系统
-  tabStore.setTabDirty(props.tab.id, false);
+async function handleSave() {
+  if (!props.tab.data?.noteId) {
+    console.warn('No noteId found, cannot save');
+    return;
+  }
+
+  try {
+    console.log('💾 Saving note:', props.tab.data.noteId);
+    
+    // 保存到文件系统和数据库
+    await noteService.updateNote({
+      id: props.tab.data.noteId,
+      content: content.value,
+    });
+    
+    // 清除修改标记
+    tabStore.setTabDirty(props.tab.id, false);
+    
+    console.log('✅ Note saved successfully');
+  } catch (error) {
+    console.error('❌ Failed to save note:', error);
+    // TODO: 显示错误通知
+  }
 }
 </script>
 

@@ -29,6 +29,7 @@ export interface INoteService {
   createFolder(options: CreateFolderOptions): Promise<Folder>;
   getFolder(id: string): Promise<Folder | null>;
   getFolderTree(): Promise<Folder[]>;
+  updateFolder(id: string, options: { name?: string; parentId?: string }): Promise<Folder | null>;
   deleteFolder(id: string): Promise<boolean>;
 
   // 标签操作
@@ -89,6 +90,10 @@ export class NoteService implements INoteService {
 
   async getFolderTree(): Promise<Folder[]> {
     return await window.ipc.folder.tree();
+  }
+
+  async updateFolder(id: string, options: { name?: string; parentId?: string }): Promise<Folder | null> {
+    return await window.ipc.folder.update(id, options);
   }
 
   async deleteFolder(id: string): Promise<boolean> {

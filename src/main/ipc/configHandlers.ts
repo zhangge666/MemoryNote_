@@ -1,7 +1,8 @@
 /**
  * 配置管理 IPC 处理器
  */
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow, shell } from 'electron';
+import * as path from 'path';
 import { IPCChannel } from '@shared/interfaces/ipc';
 import { ConfigService } from '../services/ConfigService';
 
@@ -91,6 +92,55 @@ export const registerConfigHandlers = () => {
       return true;
     } catch (error) {
       console.error('Failed to reset config:', error);
+      throw error;
+    }
+  });
+
+  // 切换工作区（热切换，无需重启）
+  ipcMain.handle('app:switch-workspace', async (_event, newWorkspacePath: string) => {
+    try {
+      console.log('🔄 Switching workspace to:', newWorkspacePath);
+      
+      // 更新配置
+      const service = await initConfigService();
+      const appConfig = service.get('app');
+      appConfig.workspace = newWorkspacePath;
+      service.set('app', appConfig);
+      await service.save();
+      
+      // 动态导入 reinitializeServices
+      const { reinitializeServices } = await import('../../main');
+      
+      // 重新初始化所有服务
+      await reinitializeServices();
+      
+      // 通知渲染进程工作区已切换
+      const allWindows = BrowserWindow.getAllWindows();
+      allWindows.forEach(win => {
+        win.webContents.send('workspace:changed', newWorkspacePath);
+      });
+      
+      console.log('✅ Workspace switched successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to switch workspace:', error);
+      throw error;
+    }
+  });
+
+  // 在文件管理器中显示文件
+  ipcMain.handle('app:show-in-folder', async (_event, filePath: string) => {
+    try {
+      console.log('📁 Showing in folder:', filePath);
+      
+      // 标准化路径（处理不同操作系统的路径分隔符）
+      const normalizedPath = path.normalize(filePath);
+      console.log('📂 Normalized path:', normalizedPath);
+      
+      shell.showItemInFolder(normalizedPath);
+      return true;
+    } catch (error) {
+      console.error('Failed to show in folder:', error);
       throw error;
     }
   });

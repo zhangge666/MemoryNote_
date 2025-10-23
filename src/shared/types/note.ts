@@ -84,6 +84,7 @@ export interface FileTreeNode {
   path: string;
   children?: FileTreeNode[];
   isExpanded?: boolean;
+  isEditing?: boolean;
   icon?: string;
   color?: string;
 }

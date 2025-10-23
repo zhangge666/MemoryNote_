@@ -52,11 +52,11 @@ export class NoteService {
     const excerpt = this.fs.extractExcerpt(content);
     const wordCount = this.fs.countWords(content);
     
-    // 插入数据库
+    // 插入数据库（不存储 content）
     await this.db.execute(
-      `INSERT INTO notes (id, title, file_path, folder_id, content, excerpt, word_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, options.title, filePath, options.folderId || null, content, excerpt, wordCount, now, now]
+      `INSERT INTO notes (id, title, file_path, folder_id, excerpt, word_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, options.title, filePath, options.folderId || null, excerpt, wordCount, now, now]
     );
     
     // 添加标签
@@ -81,7 +81,10 @@ export class NoteService {
     // 获取标签
     const tags = await this.getNoteTags(id);
     
-    return this.mapRowToNote(row, tags);
+    // 从文件系统读取内容
+    const content = await this.fs.readNote(row.file_path);
+    
+    return this.mapRowToNote(row, tags, content);
   }
 
   /**
@@ -102,8 +105,9 @@ export class NoteService {
       const excerpt = this.fs.extractExcerpt(options.content);
       const wordCount = this.fs.countWords(options.content);
       
-      updates.push('content = ?', 'excerpt = ?', 'word_count = ?');
-      values.push(options.content, excerpt, wordCount);
+      // 不更新 content 到数据库，只更新元数据
+      updates.push('excerpt = ?', 'word_count = ?');
+      values.push(excerpt, wordCount);
     }
     
     // 处理标题更新
@@ -296,12 +300,37 @@ export class NoteService {
     );
   }
 
+  /**
+   * 同步外部文件到数据库
+   * 用于 FileWatcher 检测到外部添加的文件时
+   * 只创建数据库记录，不写文件
+   */
+  async syncExternalNote(filePath: string, title: string, content: string, folderId?: string): Promise<Note> {
+    const id = randomUUID();
+    const now = Date.now();
+    
+    // 提取摘要和字数
+    const excerpt = this.fs.extractExcerpt(content);
+    const wordCount = this.fs.countWords(content);
+    
+    // 插入数据库（文件已存在，只插入元数据）
+    await this.db.execute(
+      `INSERT INTO notes (id, title, file_path, folder_id, excerpt, word_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, title, filePath, folderId || null, excerpt, wordCount, now, now]
+    );
+    
+    return await this.getNoteById(id) as Note;
+  }
+
   // ==================== 文件夹操作 ====================
 
   /**
    * 创建文件夹
    */
   async createFolder(options: CreateFolderOptions): Promise<Folder> {
+    console.log('📁 [NoteService] 创建文件夹:', options);
+    
     const id = randomUUID();
     const now = Date.now();
     
@@ -309,22 +338,34 @@ export class NoteService {
     let folderPath = options.name;
     if (options.parentId) {
       const parent = await this.getFolderById(options.parentId);
+      console.log('   父文件夹:', parent);
       if (parent) {
         folderPath = path.join(parent.path, options.name);
       }
     }
     
-    // 创建文件系统文件夹
-    await this.fs.createFolder(folderPath);
+    console.log('   文件夹路径:', folderPath);
     
-    // 插入数据库
-    await this.db.execute(
-      `INSERT INTO folders (id, name, parent_id, path, icon, color, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, options.name, options.parentId || null, folderPath, options.icon || null, options.color || null, now, now]
-    );
-    
-    return await this.getFolderById(id) as Folder;
+    try {
+      // 创建文件系统文件夹
+      await this.fs.createFolder(folderPath);
+      console.log('   ✅ 文件系统文件夹创建成功');
+      
+      // 插入数据库
+      await this.db.execute(
+        `INSERT INTO folders (id, name, parent_id, path, icon, color, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, options.name, options.parentId || null, folderPath, options.icon || null, options.color || null, now, now]
+      );
+      console.log('   ✅ 数据库记录创建成功');
+      
+      const result = await this.getFolderById(id) as Folder;
+      console.log('   ✅ 文件夹创建完成:', result);
+      return result;
+    } catch (error) {
+      console.error('   ❌ 创建文件夹失败:', error);
+      throw error;
+    }
   }
 
   /**
@@ -351,34 +392,73 @@ export class NoteService {
     
     const folders = rows.map(row => this.mapRowToFolder(row));
     
-    // 构建树形结构
-    const folderMap = new Map<string, Folder>();
-    const rootFolders: Folder[] = [];
+    console.log('📂 [NoteService] getFolderTree 返回文件夹数量:', folders.length);
     
-    folders.forEach(folder => {
-      folderMap.set(folder.id, { ...folder, children: [] });
-    });
-    
-    folders.forEach(folder => {
-      const mappedFolder = folderMap.get(folder.id)!;
-      
-      if (folder.parentId) {
-        const parent = folderMap.get(folder.parentId);
-        if (parent) {
-          parent.children = parent.children || [];
-          parent.children.push(mappedFolder);
-        }
-      } else {
-        rootFolders.push(mappedFolder);
-      }
-    });
-    
-    return rootFolders;
+    // 直接返回扁平数组，前端会自己构建树形结构
+    return folders;
   }
 
   /**
    * 删除文件夹
    */
+  async updateFolder(id: string, options: { name?: string; parentId?: string }): Promise<Folder | null> {
+    const folder = await this.getFolderById(id);
+    if (!folder) return null;
+    
+    const updates: string[] = [];
+    const params: any[] = [];
+    
+    // 如果修改了名称，需要重命名文件夹
+    if (options.name && options.name !== folder.name) {
+      const oldPath = folder.path;
+      
+      console.log('📝 更新文件夹名称:');
+      console.log('   文件夹ID:', id);
+      console.log('   旧名称:', folder.name);
+      console.log('   新名称:', options.name);
+      console.log('   旧路径:', oldPath);
+      
+      // 规范化路径（统一使用系统路径分隔符）
+      const normalizedOldPath = path.normalize(oldPath);
+      
+      // 计算新路径
+      let newPath: string;
+      const pathParts = normalizedOldPath.split(path.sep);
+      
+      console.log('   路径部分:', pathParts);
+      
+      if (pathParts.length === 1) {
+        // 根目录下的文件夹，直接使用新名称
+        newPath = options.name;
+      } else {
+        // 子文件夹，保留父路径，替换文件夹名
+        pathParts[pathParts.length - 1] = options.name;
+        newPath = pathParts.join(path.sep);
+      }
+      
+      console.log('   新路径:', newPath);
+      
+      // 重命名文件系统文件夹
+      await this.fs.renameFolder(oldPath, newPath);
+      
+      updates.push('name = ?', 'path = ?');
+      params.push(options.name, newPath);
+    }
+    
+    if (updates.length === 0) {
+      return folder;
+    }
+    
+    params.push(Date.now(), id);
+    
+    await this.db.execute(
+      `UPDATE folders SET ${updates.join(', ')}, updated_at = ? WHERE id = ?`,
+      params
+    );
+    
+    return await this.getFolderById(id);
+  }
+
   async deleteFolder(id: string): Promise<boolean> {
     const folder = await this.getFolderById(id);
     if (!folder) return false;
@@ -505,13 +585,13 @@ export class NoteService {
 
   // ==================== 辅助方法 ====================
 
-  private mapRowToNote(row: any, tags: Tag[] = []): Note {
+  private mapRowToNote(row: any, tags: Tag[] = [], content: string = ''): Note {
     return {
       id: row.id,
       title: row.title,
       filePath: row.file_path,
       folderId: row.folder_id,
-      content: row.content,
+      content: content,  // 从参数传入，而不是从数据库读取
       excerpt: row.excerpt,
       isPinned: row.is_pinned === 1,
       isArchived: row.is_archived === 1,

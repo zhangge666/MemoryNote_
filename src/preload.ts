@@ -26,6 +26,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
   once: (channel: string, callback: (...args: any[]) => void) => {
     ipcRenderer.once(channel, (_event, ...args) => callback(...args));
   },
+  
+  // 对话框 API
+  dialog: {
+    selectDirectory: (options?: { title?: string; defaultPath?: string }): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:select-directory', options),
+    
+    selectFile: (options?: { 
+      title?: string; 
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:select-file', options),
+    
+    saveFile: (options?: { 
+      title?: string; 
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:save-file', options),
+    
+    showMessage: (options: {
+      type?: 'none' | 'info' | 'error' | 'question' | 'warning';
+      title?: string;
+      message: string;
+      detail?: string;
+      buttons?: string[];
+    }): Promise<number> =>
+      ipcRenderer.invoke('dialog:show-message', options),
+  },
 });
 
 // 暴露扩展 IPC API（用于笔记管理等特定功能）
@@ -84,7 +113,10 @@ contextBridge.exposeInMainWorld('ipc', {
     tree: (): Promise<Folder[]> => 
       ipcRenderer.invoke('folder:tree'),
     
-    delete: (id: string): Promise<boolean> => 
+    update: (id: string, options: { name?: string; parentId?: string }): Promise<Folder | null> =>
+      ipcRenderer.invoke('folder:update', id, options),
+    
+    delete: (id: string): Promise<boolean> =>
       ipcRenderer.invoke('folder:delete', id),
   },
   

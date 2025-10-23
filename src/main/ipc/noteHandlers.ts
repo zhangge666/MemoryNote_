@@ -18,13 +18,32 @@ import type {
 
 let noteService: NoteService;
 let fileSystemService: FileSystemService;
+let isRegistered = false;
 
-export function registerNoteHandlers(
+/**
+ * 更新服务实例（用于热切换工作区）
+ */
+export function updateNoteServices(
   noteServiceInstance: NoteService,
   fileSystemServiceInstance: FileSystemService
 ) {
   noteService = noteServiceInstance;
   fileSystemService = fileSystemServiceInstance;
+  console.log('✅ Note services updated');
+}
+
+export function registerNoteHandlers(
+  noteServiceInstance: NoteService,
+  fileSystemServiceInstance: FileSystemService
+) {
+  // 更新服务实例
+  updateNoteServices(noteServiceInstance, fileSystemServiceInstance);
+
+  // 如果已经注册过，直接返回
+  if (isRegistered) {
+    console.log('⚠️ Note handlers already registered, skipping...');
+    return;
+  }
 
   // ==================== 笔记操作 ====================
 
@@ -70,6 +89,10 @@ export function registerNoteHandlers(
     return await noteService.getFolderTree();
   });
 
+  ipcMain.handle('folder:update', async (_event, id: string, options: { name?: string; parentId?: string }): Promise<Folder | null> => {
+    return await noteService.updateFolder(id, options);
+  });
+
   ipcMain.handle('folder:delete', async (_event, id: string): Promise<boolean> => {
     return await noteService.deleteFolder(id);
   });
@@ -104,7 +127,8 @@ export function registerNoteHandlers(
     return fileSystemService.getNotesDir();
   });
 
-  console.log('[IPC] 笔记处理器已注册');
+  isRegistered = true;
+  console.log('✅ Note IPC handlers registered');
 }
 
 

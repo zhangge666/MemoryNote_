@@ -6,6 +6,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
+import { ConfigService } from '../services/ConfigService';
 
 export interface QueryResult<T = any> {
   changes: number;
@@ -43,8 +44,29 @@ export class DatabaseManager implements IDatabaseManager {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    // 默认数据库路径：workspace/memorynote.db
-    this.dbPath = dbPath || path.join(app.getPath('userData'), 'workspace', 'memorynote.db');
+    if (dbPath) {
+      // 使用提供的路径
+      this.dbPath = dbPath;
+    } else {
+      // 从配置中读取工作区路径
+      this.dbPath = this.getWorkspaceDatabasePath();
+    }
+  }
+  
+  /**
+   * 从配置获取数据库路径
+   */
+  private getWorkspaceDatabasePath(): string {
+    const configService = ConfigService.getInstance();
+    const appConfig = configService.get('app');
+    
+    if (appConfig && appConfig.workspace) {
+      // 使用配置的工作区路径
+      return path.join(appConfig.workspace, 'memorynote.db');
+    }
+    
+    // 降级到默认路径
+    return path.join(app.getPath('userData'), 'workspace', 'memorynote.db');
   }
 
   /**
@@ -281,6 +303,78 @@ export class DatabaseManager implements IDatabaseManager {
 
           -- 触发器：删除笔记时同步到 FTS
           CREATE TRIGGER IF NOT EXISTS notes_fts_delete AFTER DELETE ON notes BEGIN
+            DELETE FROM notes_fts WHERE rowid = OLD.rowid;
+          END;
+        `,
+      },
+      {
+        version: 3,
+        name: 'remove_content_from_notes',
+        sql: `
+          -- 移除 content 字段，改为从文件系统读取
+          -- 创建新表（不包含 content 字段）
+          CREATE TABLE notes_new (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            file_path TEXT NOT NULL UNIQUE,
+            folder_id TEXT,
+            excerpt TEXT,
+            is_pinned INTEGER DEFAULT 0,
+            is_archived INTEGER DEFAULT 0,
+            is_favorite INTEGER DEFAULT 0,
+            word_count INTEGER DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            accessed_at INTEGER,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+          );
+
+          -- 迁移数据（不包括 content）
+          INSERT INTO notes_new (id, title, file_path, folder_id, excerpt, is_pinned, is_archived, is_favorite, word_count, created_at, updated_at, accessed_at)
+          SELECT id, title, file_path, folder_id, excerpt, is_pinned, is_archived, is_favorite, word_count, created_at, updated_at, accessed_at
+          FROM notes;
+
+          -- 删除旧表
+          DROP TABLE notes;
+
+          -- 重命名新表
+          ALTER TABLE notes_new RENAME TO notes;
+
+          -- 重建索引
+          CREATE INDEX IF NOT EXISTS idx_notes_folder_id ON notes(folder_id);
+          CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_notes_is_pinned ON notes(is_pinned);
+          CREATE INDEX IF NOT EXISTS idx_notes_is_archived ON notes(is_archived);
+
+          -- 删除旧的 FTS 表和触发器
+          DROP TRIGGER IF EXISTS notes_fts_insert;
+          DROP TRIGGER IF EXISTS notes_fts_update;
+          DROP TRIGGER IF EXISTS notes_fts_delete;
+          DROP TABLE IF EXISTS notes_fts;
+
+          -- 重建 FTS 表（只索引标题和摘要，不索引内容）
+          CREATE VIRTUAL TABLE notes_fts USING fts5(
+            title,
+            excerpt,
+            content='notes',
+            content_rowid='rowid'
+          );
+
+          -- 新触发器：插入笔记时同步到 FTS
+          CREATE TRIGGER notes_fts_insert AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts(rowid, title, excerpt)
+            VALUES (NEW.rowid, NEW.title, NEW.excerpt);
+          END;
+
+          -- 新触发器：更新笔记时同步到 FTS
+          CREATE TRIGGER notes_fts_update AFTER UPDATE ON notes BEGIN
+            UPDATE notes_fts SET title = NEW.title, excerpt = NEW.excerpt
+            WHERE rowid = NEW.rowid;
+          END;
+
+          -- 新触发器：删除笔记时同步到 FTS
+          CREATE TRIGGER notes_fts_delete AFTER DELETE ON notes BEGIN
             DELETE FROM notes_fts WHERE rowid = OLD.rowid;
           END;
         `,

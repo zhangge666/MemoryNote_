@@ -21,6 +21,32 @@ export interface ElectronAPI {
   on: (channel: string, callback: (...args: unknown[]) => void) => void;
   off: (channel: string, callback: (...args: unknown[]) => void) => void;
   once: (channel: string, callback: (...args: unknown[]) => void) => void;
+  
+  // 对话框 API
+  dialog: {
+    selectDirectory: (options?: { title?: string; defaultPath?: string }) => Promise<string | null>;
+    selectFile: (options?: { 
+      title?: string; 
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }) => Promise<string | null>;
+    saveFile: (options?: { 
+      title?: string; 
+      defaultPath?: string;
+      filters?: { name: string; extensions: string[] }[];
+    }) => Promise<string | null>;
+    showMessage: (options: {
+      type?: 'none' | 'info' | 'error' | 'question' | 'warning';
+      title?: string;
+      message: string;
+      detail?: string;
+      buttons?: string[];
+      defaultId?: number;
+      cancelId?: number;
+      checkboxLabel?: string;
+      checkboxChecked?: boolean;
+    }) => Promise<{ response: number; checkboxChecked: boolean }>;
+  };
 }
 
 // IPC API 类型声明
@@ -49,6 +75,7 @@ export interface IPCAPI {
     create: (options: CreateFolderOptions) => Promise<Folder>;
     get: (id: string) => Promise<Folder | null>;
     tree: () => Promise<Folder[]>;
+    update: (id: string, options: { name?: string; parentId?: string }) => Promise<Folder | null>;
     delete: (id: string) => Promise<boolean>;
   };
   

@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import { promisify } from 'util';
+import { ConfigService } from './ConfigService';
 
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
@@ -20,10 +21,35 @@ export class FileSystemService {
   private notesDir: string;
 
   constructor() {
-    // 笔记存储在用户文档目录下
-    const documentsDir = app.getPath('documents');
-    this.notesDir = path.join(documentsDir, 'MemoryNote', 'notes');
+    // 从配置中读取工作区路径
+    this.notesDir = this.getWorkspaceNotesDir();
     this.ensureNotesDir();
+  }
+  
+  /**
+   * 从配置获取笔记目录
+   */
+  private getWorkspaceNotesDir(): string {
+    const configService = ConfigService.getInstance();
+    const appConfig = configService.get('app');
+    
+    if (appConfig && appConfig.workspace) {
+      // 使用配置的工作区路径
+      return path.join(appConfig.workspace, 'notes');
+    }
+    
+    // 降级到默认路径
+    const documentsDir = app.getPath('documents');
+    return path.join(documentsDir, 'MemoryNote', 'notes');
+  }
+  
+  /**
+   * 更新笔记目录（用于热切换工作区）
+   */
+  updateNotesDir(): void {
+    this.notesDir = this.getWorkspaceNotesDir();
+    this.ensureNotesDir();
+    console.log('✅ FileSystemService notes directory updated:', this.notesDir);
   }
 
   /**
@@ -137,6 +163,45 @@ export class FileSystemService {
     } catch (error) {
       console.error('创建文件夹失败:', error);
       throw new Error(`无法创建文件夹: ${folderPath}`);
+    }
+  }
+
+  /**
+   * 重命名文件夹
+   */
+  async renameFolder(oldPath: string, newPath: string): Promise<void> {
+    const oldAbsolutePath = this.getAbsolutePath(oldPath);
+    const newAbsolutePath = this.getAbsolutePath(newPath);
+    const newDirPath = path.dirname(newAbsolutePath);
+
+    console.log('📁 重命名文件夹:');
+    console.log('   旧路径(相对):', oldPath);
+    console.log('   新路径(相对):', newPath);
+    console.log('   旧路径(绝对):', oldAbsolutePath);
+    console.log('   新路径(绝对):', newAbsolutePath);
+    console.log('   目标父目录:', newDirPath);
+
+    try {
+      // 检查源文件夹是否存在
+      if (!fs.existsSync(oldAbsolutePath)) {
+        throw new Error(`源文件夹不存在: ${oldAbsolutePath}`);
+      }
+
+      // 检查目标文件夹是否已存在
+      if (fs.existsSync(newAbsolutePath)) {
+        throw new Error(`目标文件夹已存在: ${newAbsolutePath}`);
+      }
+
+      // 确保目标父目录存在
+      if (!fs.existsSync(newDirPath)) {
+        await mkdir(newDirPath, { recursive: true });
+      }
+
+      await rename(oldAbsolutePath, newAbsolutePath);
+      console.log('✅ 文件夹重命名成功');
+    } catch (error) {
+      console.error('❌ 重命名文件夹失败:', error);
+      throw new Error(`无法重命名文件夹: ${oldPath} -> ${newPath} (${error.message})`);
     }
   }
 

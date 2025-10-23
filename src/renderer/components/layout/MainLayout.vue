@@ -16,9 +16,8 @@
         <!-- 根据导航状态渲染不同内容 -->
         <FileTree
           v-if="navigationStore.activeView === 'notes'"
+          ref="fileTreeRef"
           @select-note="handleSelectNote"
-          @create-note="handleCreateNote"
-          @create-folder="handleCreateFolder"
         />
         <div v-else class="sidebar-placeholder">
           <h3 class="text-sm font-semibold mb-4">{{ t(`navbar.${navigationStore.activeView}`) }}</h3>
@@ -75,7 +74,7 @@
             <path d="M2 3h12v10H2z" stroke="currentColor" stroke-width="1.5"/>
             <path d="M5 1v4M11 1v4" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          {{ t('statusbar.workspace') }}: workspace
+          {{ t('statusbar.workspace') }}: {{ workspaceName }}
         </span>
       </div>
       <div class="statusbar-section">
@@ -83,7 +82,7 @@
           <svg class="statusbar-icon" viewBox="0 0 16 16" fill="none">
             <path d="M3 2h10l-2 12H5L3 2z" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          {{ t('statusbar.noteCount', { count: 0 }) }}
+          {{ t('statusbar.noteCount', { count: noteCount }) }}
         </span>
         <span class="statusbar-divider"></span>
         <span class="statusbar-item">
@@ -91,7 +90,7 @@
             <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
             <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          {{ t('statusbar.reviewCount', { count: 0 }) }}
+          {{ t('statusbar.reviewCount', { count: reviewCount }) }}
         </span>
       </div>
     </div>
@@ -105,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, h } from 'vue';
+import { ref, onMounted, onUnmounted, h } from 'vue';
 import type { Component } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSidebarStore } from '@renderer/stores/sidebar';
@@ -116,6 +115,7 @@ import { useThemeStore } from '@renderer/stores/theme';
 import { getKeybindingService } from '@renderer/services/KeybindingService';
 import { registerDefaultCommands } from '@renderer/services/DefaultCommands';
 import { noteService } from '@renderer/services/NoteService';
+import { useWorkspace } from '@renderer/composables/useWorkspace';
 import Titlebar from './Titlebar.vue';
 import Navbar from './Navbar.vue';
 import LeftSidebar from './LeftSidebar.vue';
@@ -139,6 +139,46 @@ const tabStore = useTabStore();
 const navigationStore = useNavigationStore();
 const themeStore = useThemeStore();
 const keybindingService = getKeybindingService();
+
+// 状态栏数据
+const workspaceName = ref('workspace');
+const noteCount = ref(0);
+const reviewCount = ref(0);
+
+// FileTree ref
+const fileTreeRef = ref<any>();
+
+// 加载状态栏数据
+async function loadStatusBarData() {
+  try {
+    // 获取笔记统计
+    const stats = await noteService.getStats();
+    noteCount.value = stats.totalNotes;
+    
+    // 获取工作区名称
+    const config = await window.electronAPI.invoke('config:get', 'app');
+    if (config && config.workspace) {
+      const pathParts = config.workspace.split(/[/\\]/);
+      workspaceName.value = pathParts[pathParts.length - 1] || 'workspace';
+    }
+    
+    // TODO: 获取复习统计（等复习系统实现后）
+    reviewCount.value = 0;
+    
+    console.log('✅ Statusbar data loaded:', { noteCount: noteCount.value, workspace: workspaceName.value });
+  } catch (error) {
+    console.error('Failed to load statusbar data:', error);
+  }
+}
+
+// 处理工作区切换
+const handleWorkspaceChangedForStatusbar = () => {
+  console.log('📊 Reloading statusbar data...');
+  loadStatusBarData();
+};
+
+// 工作区管理
+useWorkspace();
 
 // 标签页事件处理
 function handleTabClick(tabId: string) {
@@ -231,12 +271,27 @@ onMounted(async () => {
   // 尝试加载上次的标签状态
   await tabStore.loadState();
   
+  // 加载状态栏数据
+  await loadStatusBarData();
+  
+  // 监听工作区切换事件（用于状态栏更新）
+  if (window.electronAPI) {
+    window.electronAPI.on('workspace:changed', handleWorkspaceChangedForStatusbar);
+    console.log('✅ MainLayout statusbar workspace listener registered');
+  }
+  
   // 不再自动打开欢迎页面，让用户看到空状态
 });
 
 onUnmounted(() => {
   // 停止快捷键监听
   keybindingService.stop();
+  
+  // 清理工作区切换监听器
+  if (window.electronAPI) {
+    window.electronAPI.off('workspace:changed', handleWorkspaceChangedForStatusbar);
+    console.log('🔇 MainLayout statusbar workspace listener removed');
+  }
 });
 
 // 笔记相关处理
@@ -283,31 +338,6 @@ async function handleSelectNote(note: Note) {
   }
 }
 
-async function handleCreateNote() {
-  try {
-    const note = await noteService.createNote({
-      title: '未命名笔记',
-      content: '',
-    });
-    
-    // 打开新笔记
-    handleSelectNote(note);
-  } catch (error) {
-    console.error('创建笔记失败:', error);
-  }
-}
-
-async function handleCreateFolder() {
-  try {
-    await noteService.createFolder({
-      name: '新文件夹',
-    });
-    
-    // TODO: 刷新文件树
-  } catch (error) {
-    console.error('创建文件夹失败:', error);
-  }
-}
 
 // 激活分组（当点击分区时）
 function handleGroupActivate(groupId: string) {
@@ -315,12 +345,6 @@ function handleGroupActivate(groupId: string) {
   tabStore.activateGroup(groupId);
 }
 
-// 清理
-onUnmounted(() => {
-  keybindingService.stop();
-  // 保存标签状态
-  tabStore.saveState();
-});
 </script>
 
 <style scoped>

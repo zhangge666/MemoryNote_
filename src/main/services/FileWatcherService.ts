@@ -78,13 +78,11 @@ export class FileWatcherService {
       const existing = existingNotes.find(n => n.filePath === relativePath);
       
       if (!existing) {
-        // 创建新笔记
-        await this.noteService.createNote({
-          title: fileName,
-          content,
-        });
+        // ⚠️ 外部文件已存在，直接创建数据库记录，不要再写文件
+        // 使用特殊方法直接同步外部文件到数据库
+        await this.noteService.syncExternalNote(relativePath, fileName, content);
         
-        console.log('[FileWatcher] 已同步新笔记:', relativePath);
+        console.log('[FileWatcher] 已同步外部笔记:', relativePath);
       }
     } catch (error) {
       console.error('[FileWatcher] 处理文件添加失败:', error);

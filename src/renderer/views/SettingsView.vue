@@ -30,7 +30,35 @@
           </div>
           <div class="setting-item">
             <label class="setting-label">{{ t('settings.workspace') }}</label>
-            <input type="text" class="setting-input" value="~/Documents/MemoryNote" readonly />
+            <div class="workspace-input-group">
+              <input 
+                type="text" 
+                class="setting-input workspace-input" 
+                :value="workspacePath" 
+                readonly 
+                :title="workspacePath"
+              />
+              <button 
+                class="browse-button" 
+                @click="selectWorkspace"
+                :disabled="isChangingWorkspace"
+              >
+                {{ isChangingWorkspace ? '处理中...' : '浏览' }}
+              </button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">删除确认</label>
+            <div class="setting-description">
+              删除文件时显示确认对话框
+              <button 
+                class="reset-button" 
+                @click="resetDeleteConfirm"
+                :disabled="!skipDeleteConfirm"
+              >
+                {{ skipDeleteConfirm ? '恢复删除确认' : '已启用删除确认' }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -73,13 +101,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import KeybindingSettings from '@renderer/components/settings/KeybindingSettings.vue';
 import ThemeSettings from '@renderer/components/settings/ThemeSettings.vue';
 
 const { t } = useI18n();
 const activeCategory = ref('general');
+
+// 工作目录相关
+const workspacePath = ref('');
+const isChangingWorkspace = ref(false);
+
+// 删除确认相关
+const skipDeleteConfirm = ref(false);
 
 const categories = [
   { id: 'general', icon: '🌐', label: 'settings.general' },
@@ -91,6 +126,115 @@ const categories = [
 
 const currentCategory = computed(() => {
   return categories.find(c => c.id === activeCategory.value);
+});
+
+// 加载工作目录配置
+const loadWorkspace = async () => {
+  try {
+    const config = await window.electronAPI.invoke('config:get', 'app');
+    if (config && config.workspace) {
+      workspacePath.value = config.workspace;
+    }
+  } catch (error) {
+    console.error('Failed to load workspace config:', error);
+  }
+};
+
+// 加载删除确认配置
+const loadDeleteConfirmConfig = async () => {
+  try {
+    const config = await window.electronAPI.invoke('config:get', 'ui');
+    skipDeleteConfirm.value = config?.skipDeleteConfirm || false;
+  } catch (error) {
+    console.error('Failed to load delete confirm config:', error);
+  }
+};
+
+// 重置删除确认
+const resetDeleteConfirm = async () => {
+  try {
+    const config = await window.electronAPI.invoke('config:get', 'ui');
+    const uiConfig = config || {};
+    uiConfig.skipDeleteConfirm = false;
+    await window.electronAPI.invoke('config:set', 'ui', uiConfig);
+    skipDeleteConfirm.value = false;
+    
+    await window.electronAPI.dialog.showMessage({
+      type: 'info',
+      title: '提示',
+      message: '已恢复删除确认对话框',
+      buttons: ['确定'],
+    });
+  } catch (error) {
+    console.error('Failed to reset delete confirm:', error);
+  }
+};
+
+// 选择工作目录
+const selectWorkspace = async () => {
+  try {
+    const selectedPath = await window.electronAPI.dialog.selectDirectory({
+      title: '选择工作目录',
+      defaultPath: workspacePath.value || undefined,
+    });
+
+    if (selectedPath) {
+      // 检查是否与当前工作目录相同
+      if (selectedPath === workspacePath.value) {
+        await window.electronAPI.dialog.showMessage({
+          type: 'info',
+          title: '提示',
+          message: '已经是当前工作目录',
+          buttons: ['确定'],
+        });
+        return;
+      }
+
+      isChangingWorkspace.value = true;
+      
+      // 显示确认对话框
+      const response = await window.electronAPI.dialog.showMessage({
+        type: 'question',
+        title: '更改工作目录',
+        message: '确定要更改工作目录吗？',
+        detail: `当前工作目录: ${workspacePath.value}\n新的工作目录: ${selectedPath}\n\n更改后将自动切换到新的工作区，所有未保存的更改将会保存。`,
+        buttons: ['确定', '取消'],
+      });
+
+      if (response === 0) {
+        // 用户点击了"确定"
+        try {
+          // 调用热切换工作区
+          await window.electronAPI.invoke('app:switch-workspace', selectedPath);
+          
+          // 更新显示的工作目录路径
+          workspacePath.value = selectedPath;
+          
+          // 成功消息已经由 useWorkspace 中的通知显示了
+        } catch (error) {
+          console.error('Failed to switch workspace:', error);
+          
+          await window.electronAPI.dialog.showMessage({
+            type: 'error',
+            title: '错误',
+            message: '切换工作目录失败',
+            detail: error instanceof Error ? error.message : '未知错误',
+            buttons: ['确定'],
+          });
+        }
+      }
+      
+      isChangingWorkspace.value = false;
+    }
+  } catch (error) {
+    console.error('Failed to select workspace:', error);
+    isChangingWorkspace.value = false;
+  }
+};
+
+onMounted(() => {
+  loadWorkspace();
+  loadDeleteConfirmConfig();
 });
 </script>
 
@@ -212,6 +356,73 @@ const currentCategory = computed(() => {
   width: 20px;
   height: 20px;
   cursor: pointer;
+}
+
+/* 工作目录输入组 */
+.workspace-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.workspace-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.browse-button {
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.browse-button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.browse-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.browse-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reset-button {
+  padding: 0.4rem 0.8rem;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  margin-left: 0.5rem;
+}
+
+.reset-button:hover:not(:disabled) {
+  background: var(--color-hover);
+  border-color: var(--color-primary);
+}
+
+.reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-description {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
 }
 
 .about-info {
