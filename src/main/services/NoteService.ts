@@ -441,6 +441,12 @@ export class NoteService {
       // 重命名文件系统文件夹
       await this.fs.renameFolder(oldPath, newPath);
       
+      // 更新该文件夹及其子文件夹下所有笔记的 file_path
+      await this.updateNotesPathAfterFolderRename(oldPath, newPath);
+      
+      // 递归更新所有子文件夹的 path
+      await this.updateSubfoldersPathAfterRename(id, oldPath, newPath);
+      
       updates.push('name = ?', 'path = ?');
       params.push(options.name, newPath);
     }
@@ -459,15 +465,118 @@ export class NoteService {
     return await this.getFolderById(id);
   }
 
+  /**
+   * 文件夹重命名后更新笔记路径
+   */
+  private async updateNotesPathAfterFolderRename(oldFolderPath: string, newFolderPath: string): Promise<void> {
+    console.log('📝 更新笔记路径:', oldFolderPath, '->', newFolderPath);
+    
+    // 规范化路径分隔符
+    const normalizedOldPath = oldFolderPath.replace(/\\/g, '/');
+    const normalizedNewPath = newFolderPath.replace(/\\/g, '/');
+    
+    // 获取所有笔记
+    const allNotes = await this.getNotes({});
+    
+    for (const note of allNotes) {
+      const normalizedNotePath = note.filePath.replace(/\\/g, '/');
+      
+      // 检查笔记是否在重命名的文件夹下
+      if (normalizedNotePath.startsWith(normalizedOldPath + '/')) {
+        // 替换路径前缀
+        const relativePath = normalizedNotePath.substring(normalizedOldPath.length + 1);
+        const newFilePath = path.join(newFolderPath, relativePath);
+        
+        console.log(`   更新笔记路径: ${note.title}`);
+        console.log(`   旧路径: ${note.filePath}`);
+        console.log(`   新路径: ${newFilePath}`);
+        
+        // 更新数据库中的 file_path
+        await this.db.execute(
+          'UPDATE notes SET file_path = ?, updated_at = ? WHERE id = ?',
+          [newFilePath, Date.now(), note.id]
+        );
+      }
+    }
+  }
+  
+  /**
+   * 文件夹重命名后递归更新子文件夹路径
+   */
+  private async updateSubfoldersPathAfterRename(parentFolderId: string, oldParentPath: string, newParentPath: string): Promise<void> {
+    console.log('📁 更新子文件夹路径:', oldParentPath, '->', newParentPath);
+    
+    // 规范化路径分隔符
+    const normalizedOldPath = oldParentPath.replace(/\\/g, '/');
+    const normalizedNewPath = newParentPath.replace(/\\/g, '/');
+    
+    // 获取所有子文件夹
+    const subfolders = await this.db.query<any>(
+      'SELECT * FROM folders WHERE parent_id = ?',
+      [parentFolderId]
+    );
+    
+    for (const subfolder of subfolders) {
+      const normalizedSubfolderPath = subfolder.path.replace(/\\/g, '/');
+      
+      // 检查子文件夹是否在重命名的文件夹下
+      if (normalizedSubfolderPath.startsWith(normalizedOldPath + '/')) {
+        // 替换路径前缀
+        const relativePath = normalizedSubfolderPath.substring(normalizedOldPath.length + 1);
+        const newFolderPath = path.join(newParentPath, relativePath);
+        
+        console.log(`   更新子文件夹路径: ${subfolder.name}`);
+        console.log(`   旧路径: ${subfolder.path}`);
+        console.log(`   新路径: ${newFolderPath}`);
+        
+        // 更新数据库中的 path
+        await this.db.execute(
+          'UPDATE folders SET path = ?, updated_at = ? WHERE id = ?',
+          [newFolderPath, Date.now(), subfolder.id]
+        );
+        
+        // 递归更新子文件夹的子文件夹
+        await this.updateSubfoldersPathAfterRename(subfolder.id, subfolder.path, newFolderPath);
+      }
+    }
+  }
+
   async deleteFolder(id: string): Promise<boolean> {
     const folder = await this.getFolderById(id);
     if (!folder) return false;
     
-    // 删除文件系统文件夹
-    await this.fs.deleteFolder(folder.path);
+    console.log('🗑️ 删除文件夹:', folder.name, folder.path);
     
-    // 删除数据库记录（级联删除子文件夹和笔记）
+    // 1. 先获取该文件夹下的所有笔记
+    const notes = await this.getNotes({ folderId: id });
+    console.log('   文件夹内的笔记数量:', notes.length);
+    
+    // 2. 删除所有笔记的数据库记录（文件会随文件夹一起删除）
+    for (const note of notes) {
+      console.log('   删除笔记记录:', note.title);
+      await this.db.execute('DELETE FROM notes WHERE id = ?', [note.id]);
+    }
+    
+    // 3. 递归获取所有子文件夹
+    const subfolders = await this.db.query<any>(
+      'SELECT * FROM folders WHERE parent_id = ?',
+      [id]
+    );
+    console.log('   子文件夹数量:', subfolders.length);
+    
+    // 4. 递归删除子文件夹
+    for (const subfolder of subfolders) {
+      console.log('   递归删除子文件夹:', subfolder.name);
+      await this.deleteFolder(subfolder.id);
+    }
+    
+    // 5. 删除文件系统文件夹（此时里面已经没有笔记记录了）
+    await this.fs.deleteFolder(folder.path);
+    console.log('   ✅ 文件系统文件夹已删除');
+    
+    // 6. 删除文件夹数据库记录
     await this.db.execute('DELETE FROM folders WHERE id = ?', [id]);
+    console.log('   ✅ 数据库记录已删除');
     
     return true;
   }

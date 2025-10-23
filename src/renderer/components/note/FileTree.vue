@@ -46,7 +46,7 @@
           :key="node.id"
           :node="node"
           :level="0"
-          :active-id="activeNodeId"
+          :selected-ids="selectedNodeIds"
           :active-folder-id="activeFolderId"
           :editing-node-id="editingNodeId"
           @select="handleSelectNode"
@@ -88,10 +88,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { noteService } from '@renderer/services/NoteService';
+import { useTabStore } from '@renderer/stores/tab';
 import TreeNode from './TreeNode.vue';
 import ContextMenu from '@renderer/components/common/ContextMenu.vue';
 import type { ContextMenuItem } from '@renderer/components/common/ContextMenu.vue';
 import type { FileTreeNode as IFileTreeNode, Note } from '@shared/types/note';
+
+const tabStore = useTabStore();
 
 const emit = defineEmits<{
   (e: 'select-note', note: Note): void;
@@ -102,11 +105,20 @@ const searchQuery = ref('');
 const searchResults = ref<Note[]>([]);
 const isSearching = computed(() => searchQuery.value.trim().length > 0);
 
-// 当前选中的节点
-const activeNodeId = ref<string | null>(null);
+// 多选支持
+const selectedNodeIds = ref<Set<string>>(new Set());
+const lastSelectedNodeId = ref<string | null>(null); // 用于 Shift 连续选择
 
 // 当前活动的文件夹（用于新建操作）
 const activeFolderId = ref<string | null>(null);
+
+// 当前激活的单个节点（用于兼容旧逻辑）
+const activeNodeId = computed(() => {
+  if (selectedNodeIds.value.size === 1) {
+    return Array.from(selectedNodeIds.value)[0];
+  }
+  return null;
+});
 
 // 右键菜单
 const contextMenuVisible = ref(false);
@@ -210,11 +222,65 @@ async function loadFileTree(preserveState = true) {
   }
 }
 
-// 选择节点
-function handleSelectNode(node: IFileTreeNode) {
-  activeNodeId.value = node.id;
+// 获取所有节点的扁平列表（按显示顺序）
+function getFlatNodeList(): IFileTreeNode[] {
+  const result: IFileTreeNode[] = [];
   
-  if (node.type === 'note') {
+  const traverse = (nodes: IFileTreeNode[]) => {
+    for (const node of nodes) {
+      result.push(node);
+      if (node.children && node.isExpanded) {
+        traverse(node.children);
+      }
+    }
+  };
+  
+  traverse(treeNodes.value);
+  return result;
+}
+
+// 选择节点（支持 Ctrl 和 Shift 多选）
+function handleSelectNode(node: IFileTreeNode, event?: MouseEvent) {
+  console.log('🖱️ 选择节点:', node.name, { ctrl: event?.ctrlKey, shift: event?.shiftKey });
+  
+  if (event?.ctrlKey || event?.metaKey) {
+    // Ctrl/Cmd + 点击：切换选中状态
+    if (selectedNodeIds.value.has(node.id)) {
+      selectedNodeIds.value.delete(node.id);
+    } else {
+      selectedNodeIds.value.add(node.id);
+    }
+    lastSelectedNodeId.value = node.id;
+  } else if (event?.shiftKey && lastSelectedNodeId.value) {
+    // Shift + 点击：连续选择
+    const flatList = getFlatNodeList();
+    const lastIndex = flatList.findIndex(n => n.id === lastSelectedNodeId.value);
+    const currentIndex = flatList.findIndex(n => n.id === node.id);
+    
+    if (lastIndex !== -1 && currentIndex !== -1) {
+      const start = Math.min(lastIndex, currentIndex);
+      const end = Math.max(lastIndex, currentIndex);
+      
+      // 清空当前选择
+      selectedNodeIds.value.clear();
+      
+      // 选择范围内的所有节点
+      for (let i = start; i <= end; i++) {
+        selectedNodeIds.value.add(flatList[i].id);
+      }
+    }
+  } else {
+    // 普通点击：单选
+    selectedNodeIds.value.clear();
+    selectedNodeIds.value.add(node.id);
+    lastSelectedNodeId.value = node.id;
+  }
+  
+  // 触发更新
+  selectedNodeIds.value = new Set(selectedNodeIds.value);
+  
+  // 如果只选中一个笔记，加载笔记内容
+  if (selectedNodeIds.value.size === 1 && node.type === 'note') {
     // 找到该笔记所在的文件夹并设为活动文件夹
     const findParentFolder = (nodes: IFileTreeNode[], targetId: string, parentId: string | null = null): string | null => {
       for (const n of nodes) {
@@ -239,9 +305,22 @@ function handleSelectNode(node: IFileTreeNode) {
 }
 
 // 激活文件夹（单击文件夹）
-function handleActivateFolder(folderId: string) {
+function handleActivateFolder(folderId: string, event?: MouseEvent) {
   activeFolderId.value = folderId;
-  activeNodeId.value = folderId; // 设置选中状态
+  
+  // 使用多选逻辑
+  if (event?.ctrlKey || event?.metaKey) {
+    if (selectedNodeIds.value.has(folderId)) {
+      selectedNodeIds.value.delete(folderId);
+    } else {
+      selectedNodeIds.value.add(folderId);
+    }
+  } else {
+    selectedNodeIds.value.clear();
+    selectedNodeIds.value.add(folderId);
+  }
+  lastSelectedNodeId.value = folderId;
+  selectedNodeIds.value = new Set(selectedNodeIds.value);
 }
 
 // 展开/折叠
@@ -388,7 +467,9 @@ function handleContentClick(event: MouseEvent) {
   // 如果点击的是 tree-content 或 tree-nodes，重置活动文件夹和选中状态
   if (target.classList.contains('tree-content') || target.classList.contains('tree-nodes')) {
     activeFolderId.value = null;
-    activeNodeId.value = null; // 取消选中效果
+    selectedNodeIds.value.clear(); // 取消所有选中
+    lastSelectedNodeId.value = null;
+    selectedNodeIds.value = new Set(selectedNodeIds.value);
     console.log('🖱️ 点击空白区域，已清空选中状态');
   }
 }
@@ -501,37 +582,179 @@ function handleSelectNote(note: Note) {
 
 // 右键菜单
 function handleContextMenu(node: IFileTreeNode, event: MouseEvent) {
+  // 如果右键点击的节点不在已选中的节点中，则单选该节点
+  if (!selectedNodeIds.value.has(node.id)) {
+    selectedNodeIds.value.clear();
+    selectedNodeIds.value.add(node.id);
+    lastSelectedNodeId.value = node.id;
+    selectedNodeIds.value = new Set(selectedNodeIds.value);
+  }
+  
   currentContextNode.value = node;
   contextMenuX.value = event.clientX;
   contextMenuY.value = event.clientY;
   
   const items: ContextMenuItem[] = [];
+  const selectedCount = selectedNodeIds.value.size;
   
-  if (node.type === 'note') {
+  console.log('🖱️ 右键菜单，选中数量:', selectedCount);
+  
+  if (selectedCount > 1) {
+    // 多选批量操作菜单
     items.push(
-      { label: '打开', icon: '📂', action: () => handleSelectNode(node) },
-      { divider: true },
-      { label: '重命名', icon: '✏️', action: () => handleRename(node) },
-      { label: '删除', icon: '🗑️', action: () => handleDelete(node) },
-      { divider: true },
-      { label: '在文件管理器中显示', icon: '📁', action: () => handleShowInExplorer(node) }
+      { label: `删除选中的 ${selectedCount} 项`, icon: '🗑️', action: () => handleBatchDelete() }
     );
   } else {
-    items.push(
-      { label: '新建笔记', icon: '📝', action: () => { activeFolderId.value = node.id; handleNewNote(); } },
-      { label: '新建文件夹', icon: '📁', action: () => { activeFolderId.value = node.id; handleNewFolder(); } },
-      { divider: true },
-      { label: '设为活动文件夹', icon: '📌', action: () => activeFolderId.value = node.id },
-      { divider: true },
-      { label: '重命名', icon: '✏️', action: () => handleRename(node) },
-      { label: '删除', icon: '🗑️', action: () => handleDelete(node) },
-      { divider: true },
-      { label: '在文件管理器中显示', icon: '📁', action: () => handleShowInExplorer(node) }
-    );
+    // 单选菜单
+    if (node.type === 'note') {
+      items.push(
+        { label: '打开', icon: '📂', action: () => handleSelectNode(node) },
+        { divider: true },
+        { label: '重命名', icon: '✏️', action: () => handleRename(node) },
+        { label: '删除', icon: '🗑️', action: () => handleDelete(node) },
+        { divider: true },
+        { label: '在文件管理器中显示', icon: '📁', action: () => handleShowInExplorer(node) }
+      );
+    } else {
+      items.push(
+        { label: '新建笔记', icon: '📝', action: () => { activeFolderId.value = node.id; handleNewNote(); } },
+        { label: '新建文件夹', icon: '📁', action: () => { activeFolderId.value = node.id; handleNewFolder(); } },
+        { divider: true },
+        { label: '设为活动文件夹', icon: '📌', action: () => activeFolderId.value = node.id },
+        { divider: true },
+        { label: '重命名', icon: '✏️', action: () => handleRename(node) },
+        { label: '删除', icon: '🗑️', action: () => handleDelete(node) },
+        { divider: true },
+        { label: '在文件管理器中显示', icon: '📁', action: () => handleShowInExplorer(node) }
+      );
+    }
   }
   
   contextMenuItems.value = items;
   contextMenuVisible.value = true;
+}
+
+// 批量删除
+async function handleBatchDelete() {
+  try {
+    const config = await window.electronAPI.invoke('config:get', 'ui');
+    const skipConfirm = config?.skipDeleteConfirm || false;
+    
+    const selectedNodes: IFileTreeNode[] = [];
+    const findNodeById = (nodes: IFileTreeNode[], id: string): IFileTreeNode | null => {
+      for (const node of nodes) {
+        if (node.id === id) return node;
+        if (node.children) {
+          const found = findNodeById(node.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    for (const id of selectedNodeIds.value) {
+      const node = findNodeById(treeNodes.value, id);
+      if (node) selectedNodes.push(node);
+    }
+    
+    let shouldDelete = false;
+    
+    if (!skipConfirm) {
+      const noteCount = selectedNodes.filter(n => n.type === 'note').length;
+      const folderCount = selectedNodes.filter(n => n.type === 'folder').length;
+      
+      let message = `确定要删除选中的 ${selectedNodes.length} 项吗？\n\n`;
+      if (noteCount > 0) message += `- 笔记: ${noteCount} 个\n`;
+      if (folderCount > 0) message += `- 文件夹: ${folderCount} 个（将删除文件夹内的所有内容）`;
+      
+      const result = await window.electronAPI.dialog.showMessage({
+        type: 'warning',
+        title: '确认批量删除',
+        message,
+        buttons: ['取消', '删除'],
+        defaultId: 0,
+        cancelId: 0,
+        checkboxLabel: '不再提示',
+        checkboxChecked: false,
+      });
+      
+      shouldDelete = result.response === 1;
+      
+      if (result.checkboxChecked && shouldDelete) {
+        const uiConfig = config || {};
+        uiConfig.skipDeleteConfirm = true;
+        await window.electronAPI.invoke('config:set', 'ui', uiConfig);
+      }
+    } else {
+      shouldDelete = true;
+    }
+    
+    if (shouldDelete) {
+      console.log('🗑️ 批量删除:', selectedNodes.map(n => n.name));
+      
+      // 过滤掉那些父文件夹也被选中的子文件夹
+      const isChildOf = (node: IFileTreeNode, potentialParent: IFileTreeNode): boolean => {
+        if (node.type !== 'folder' && node.type !== 'note') return false;
+        
+        // 检查 node 的路径是否在 potentialParent 的路径下
+        // 规范化路径，使用统一的分隔符
+        const normalizedNodePath = node.path.replace(/\\/g, '/');
+        const normalizedParentPath = potentialParent.path.replace(/\\/g, '/');
+        
+        if (potentialParent.type === 'folder' && normalizedNodePath.startsWith(normalizedParentPath + '/')) {
+          return true;
+        }
+        return false;
+      };
+      
+      const nodesToDelete = selectedNodes.filter(node => {
+        // 检查是否有其他选中的文件夹是这个节点的父文件夹
+        for (const other of selectedNodes) {
+          if (other.id !== node.id && other.type === 'folder') {
+            if (isChildOf(node, other)) {
+              console.log(`   跳过 ${node.name}（其父文件夹 ${other.name} 也被选中）`);
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+      
+      console.log('   实际删除:', nodesToDelete.map(n => n.name));
+      
+      // 先关闭笔记相关的标签
+      for (const node of nodesToDelete) {
+        if (node.type === 'note') {
+          await tabStore.closeTabByNoteId(node.id);
+        }
+      }
+      
+      // 再删除笔记
+      for (const node of nodesToDelete) {
+        if (node.type === 'note') {
+          console.log('   删除笔记:', node.name);
+          await noteService.deleteNote(node.id);
+        }
+      }
+      
+      // 最后删除文件夹
+      for (const node of nodesToDelete) {
+        if (node.type === 'folder') {
+          console.log('   删除文件夹:', node.name);
+          await noteService.deleteFolder(node.id);
+        }
+      }
+      
+      selectedNodeIds.value.clear();
+      lastSelectedNodeId.value = null;
+      selectedNodeIds.value = new Set(selectedNodeIds.value);
+      
+      await loadFileTree();
+      console.log('✅ 批量删除完成');
+    }
+  } catch (error) {
+    console.error('❌ 批量删除失败:', error);
+  }
 }
 
 // 删除
@@ -567,6 +790,9 @@ async function handleDelete(node: IFileTreeNode) {
     
     if (shouldDelete) {
       if (node.type === 'note') {
+        // 先关闭相关标签
+        await tabStore.closeTabByNoteId(node.id);
+        // 再删除笔记
         await noteService.deleteNote(node.id);
       } else {
         await noteService.deleteFolder(node.id);
@@ -614,7 +840,10 @@ async function handleEditConfirm(nodeId: string, newName: string) {
         
         await loadFileTree();
         emit('select-note', note);
-        activeNodeId.value = note.id;
+        selectedNodeIds.value.clear();
+        selectedNodeIds.value.add(note.id);
+        lastSelectedNodeId.value = note.id;
+        selectedNodeIds.value = new Set(selectedNodeIds.value);
       } else {
         console.log('📁 创建新文件夹...', { name: newName, parentId: activeFolderId.value });
         const result = await noteService.createFolder({
@@ -639,9 +868,21 @@ async function handleEditConfirm(nodeId: string, newName: string) {
       
       if (node.type === 'note') {
         await noteService.updateNote({ id: node.id, title: newName });
+        // 更新标签系统中的标题
+        tabStore.updateTabTitleByNoteId(node.id, newName);
         console.log('✅ 笔记重命名成功');
       } else {
+        // 更新标签系统中该文件夹下所有文件的路径
+        const oldPath = node.path;
+        const pathParts = oldPath.split(/[/\\]/);
+        pathParts[pathParts.length - 1] = newName;
+        const newPath = pathParts.join('/');
+        
         await noteService.updateFolder(node.id, { name: newName });
+        
+        // 更新标签系统中的文件路径
+        tabStore.updateTabFilePathByPrefix(oldPath, newPath);
+        
         console.log('✅ 文件夹重命名成功');
       }
       
@@ -699,7 +940,9 @@ const handleWorkspaceChanged = () => {
   searchQuery.value = '';
   searchResults.value = [];
   activeFolderId.value = null;
-  activeNodeId.value = null;
+  selectedNodeIds.value.clear();
+  lastSelectedNodeId.value = null;
+  selectedNodeIds.value = new Set(selectedNodeIds.value);
   loadFileTree(false);
 };
 

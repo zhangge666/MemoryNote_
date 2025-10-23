@@ -69,6 +69,15 @@ export interface ITabService {
 
   /** 获取标签所在的组 */
   findGroupByTabId(tabId: string): TabGroup | null;
+
+  /** 根据笔记ID关闭标签 */
+  closeTabByNoteId(noteId: string): Promise<boolean>;
+
+  /** 根据笔记ID更新标签标题 */
+  updateTabTitleByNoteId(noteId: string, newTitle: string): boolean;
+
+  /** 更新标签的文件路径（用于文件夹重命名） */
+  updateTabFilePathByPrefix(oldPrefix: string, newPrefix: string): number;
 }
 
 export class TabService implements ITabService {
@@ -645,6 +654,93 @@ export class TabService implements ITabService {
       }
     }
     return null;
+  }
+
+  /**
+   * 根据笔记ID关闭标签
+   */
+  async closeTabByNoteId(noteId: string): Promise<boolean> {
+    // 查找所有包含该笔记的标签
+    const tabsToClose: string[] = [];
+    
+    for (const group of Object.values(this.state.groups)) {
+      for (const tab of group.tabs) {
+        // 检查标签的 data 中是否包含该笔记ID（使用 noteId 字段）
+        if (tab.data && typeof tab.data === 'object' && 'noteId' in tab.data && tab.data.noteId === noteId) {
+          tabsToClose.push(tab.id);
+        }
+      }
+    }
+    
+    console.log('🗑️ 关闭标签（笔记ID:', noteId, '）:', tabsToClose.length, '个标签');
+    
+    // 关闭所有相关标签
+    for (const tabId of tabsToClose) {
+      await this.closeTab(tabId);
+    }
+    
+    return tabsToClose.length > 0;
+  }
+
+  /**
+   * 根据笔记ID更新标签标题
+   */
+  updateTabTitleByNoteId(noteId: string, newTitle: string): boolean {
+    let updated = false;
+    
+    for (const group of Object.values(this.state.groups)) {
+      for (const tab of group.tabs) {
+        // 检查标签的 data 中是否包含该笔记ID（使用 noteId 字段）
+        if (tab.data && typeof tab.data === 'object' && 'noteId' in tab.data && tab.data.noteId === noteId) {
+          console.log('✏️ 更新标签标题:', tab.title, '->', newTitle);
+          tab.title = newTitle;
+          updated = true;
+        }
+      }
+    }
+    
+    return updated;
+  }
+
+  /**
+   * 更新标签的文件路径（用于文件夹重命名）
+   */
+  updateTabFilePathByPrefix(oldPrefix: string, newPrefix: string): number {
+    let updateCount = 0;
+    
+    // 规范化路径分隔符
+    const normalizedOldPrefix = oldPrefix.replace(/\\/g, '/');
+    const normalizedNewPrefix = newPrefix.replace(/\\/g, '/');
+    
+    for (const group of Object.values(this.state.groups)) {
+      for (const tab of group.tabs) {
+        if (tab.filePath) {
+          const normalizedFilePath = tab.filePath.replace(/\\/g, '/');
+          
+          // 检查文件路径是否以旧前缀开头
+          if (normalizedFilePath.startsWith(normalizedOldPrefix + '/')) {
+            const relativePath = normalizedFilePath.substring(normalizedOldPrefix.length + 1);
+            const newFilePath = normalizedNewPrefix + '/' + relativePath;
+            
+            console.log('📁 更新标签文件路径:', tab.title);
+            console.log('   旧路径:', tab.filePath);
+            console.log('   新路径:', newFilePath);
+            
+            tab.filePath = newFilePath;
+            
+            // 同时更新 data 中的 filePath
+            if (tab.data && typeof tab.data === 'object' && 'filePath' in tab.data) {
+              tab.data.filePath = newFilePath;
+            }
+            
+            updateCount++;
+          }
+        }
+      }
+    }
+    
+    console.log(`✅ 已更新 ${updateCount} 个标签的文件路径`);
+    return updateCount;
   }
 
   /**

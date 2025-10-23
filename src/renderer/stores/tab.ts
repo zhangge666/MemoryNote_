@@ -108,6 +108,18 @@ export const useTabStore = defineStore('tab', () => {
     return tabService.findGroupByTabId(tabId);
   }
 
+  async function closeTabByNoteId(noteId: string) {
+    return await tabService.closeTabByNoteId(noteId);
+  }
+
+  function updateTabTitleByNoteId(noteId: string, newTitle: string) {
+    return tabService.updateTabTitleByNoteId(noteId, newTitle);
+  }
+
+  function updateTabFilePathByPrefix(oldPrefix: string, newPrefix: string) {
+    return tabService.updateTabFilePathByPrefix(oldPrefix, newPrefix);
+  }
+
   // ========== Actions - 状态管理 ==========
   function getState() {
     return tabService.getState();
@@ -209,6 +221,9 @@ export const useTabStore = defineStore('tab', () => {
     findTabById,
     findTabByPath,
     findGroupByTabId,
+    closeTabByNoteId,
+    updateTabTitleByNoteId,
+    updateTabFilePathByPrefix,
     getState,
     restoreState,
     saveState,

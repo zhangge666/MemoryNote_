@@ -3,7 +3,7 @@
     <div
       class="node-content"
       :class="{
-        'is-active': activeId === node.id,
+        'is-selected': selectedIds.has(node.id),
         'is-folder-active': activeFolderId === node.id,
         'is-folder': node.type === 'folder'
       }"
@@ -53,11 +53,11 @@
         :key="child.id"
         :node="child"
         :level="level + 1"
-        :active-id="activeId"
+        :selected-ids="selectedIds"
         :active-folder-id="activeFolderId"
         :editing-node-id="editingNodeId"
-        @select="$emit('select', $event)"
-        @activate="$emit('activate', $event)"
+        @select="(...args) => $emit('select', ...args)"
+        @activate="(...args) => $emit('activate', ...args)"
         @toggle="$emit('toggle', $event)"
         @context-menu="(...args) => $emit('context-menu', ...args)"
         @edit-confirm="(...args) => $emit('edit-confirm', ...args)"
@@ -74,14 +74,14 @@ import type { FileTreeNode as IFileTreeNode } from '@shared/types/note';
 const props = defineProps<{
   node: IFileTreeNode;
   level: number;
-  activeId: string | null;
+  selectedIds: Set<string>;
   activeFolderId: string | null;
   editingNodeId: string | null;
 }>();
 
 const emit = defineEmits<{
-  (e: 'select', node: IFileTreeNode): void;
-  (e: 'activate', folderId: string): void;
+  (e: 'select', node: IFileTreeNode, event: MouseEvent): void;
+  (e: 'activate', folderId: string, event: MouseEvent): void;
   (e: 'toggle', nodeId: string): void;
   (e: 'context-menu', node: IFileTreeNode, event: MouseEvent): void;
   (e: 'edit-confirm', nodeId: string, newName: string): void;
@@ -105,12 +105,12 @@ watch(isEditing, async (editing) => {
   }
 });
 
-function handleClick() {
+function handleClick(event: MouseEvent) {
   if (props.node.type === 'folder') {
-    emit('activate', props.node.id);
+    emit('activate', props.node.id, event);
     emit('toggle', props.node.id);
   } else {
-    emit('select', props.node);
+    emit('select', props.node, event);
   }
 }
 
@@ -165,7 +165,7 @@ function handleEditBlur() {
   background: var(--color-hover);
 }
 
-.node-content.is-active {
+.node-content.is-selected {
   background: var(--color-hover);
 }
 
