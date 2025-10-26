@@ -70,6 +70,7 @@
     "@milkdown/preset-commonmark": "^7.17.1",
     "@milkdown/preset-gfm": "^7.17.1",
     "@milkdown/theme-nord": "^7.17.1",
+    "@milkdown/utils": "^7.17.1",
     "@types/highlight.js": "^9.12.4",
     "@types/markdown-it": "^14.1.2",
     "better-sqlite3": "^9.0.0",

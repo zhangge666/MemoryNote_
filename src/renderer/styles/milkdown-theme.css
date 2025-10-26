@@ -1,0 +1,317 @@
+/* Milkdown 自定义主题 */
+
+/* 编辑器容器 */
+.milkdown {
+  height: 100%;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.milkdown .editor {
+  height: 100%;
+  padding: 1.5rem;
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+/* ProseMirror 编辑器 */
+.milkdown .ProseMirror {
+  min-height: 100%;
+  outline: none;
+}
+
+.milkdown .ProseMirror p {
+  margin: 0.8em 0;
+}
+
+/* 标题样式 */
+.milkdown .ProseMirror h1 {
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #2d3748;
+  margin: 1.5em 0 0.8em;
+}
+
+.milkdown .ProseMirror h2 {
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #2d3748;
+  margin: 1.3em 0 0.7em;
+}
+
+.milkdown .ProseMirror h3 {
+  font-size: 1.4em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #2d3748;
+  margin: 1.2em 0 0.6em;
+}
+
+.milkdown .ProseMirror h4 {
+  font-size: 1.2em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #4a5568;
+  margin: 1.1em 0 0.5em;
+}
+
+.milkdown .ProseMirror h5 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #4a5568;
+  margin: 1em 0 0.5em;
+}
+
+.milkdown .ProseMirror h6 {
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #718096;
+  margin: 1em 0 0.5em;
+}
+
+/* 粗体和斜体 */
+.milkdown .ProseMirror strong {
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.milkdown .ProseMirror em {
+  font-style: italic;
+  color: #4a5568;
+}
+
+/* 删除线 */
+.milkdown .ProseMirror s,
+.milkdown .ProseMirror del {
+  text-decoration: line-through;
+  color: #a0aec0;
+}
+
+/* 链接 */
+.milkdown .ProseMirror a {
+  color: #667eea;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.milkdown .ProseMirror a:hover {
+  color: #5a67d8;
+  text-decoration: underline;
+}
+
+/* 行内代码 */
+.milkdown .ProseMirror code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background-color: rgba(102, 126, 234, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: #e53e3e;
+}
+
+/* 代码块 */
+.milkdown .ProseMirror pre {
+  background: #2d3748;
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.milkdown .ProseMirror pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+
+/* 引用 */
+.milkdown .ProseMirror blockquote {
+  border-left: 4px solid #cbd5e0;
+  padding-left: 1rem;
+  margin: 1em 0;
+  color: #718096;
+  font-style: italic;
+}
+
+/* 列表 */
+.milkdown .ProseMirror ul,
+.milkdown .ProseMirror ol {
+  padding-left: 2em;
+  margin: 0.8em 0;
+}
+
+.milkdown .ProseMirror li {
+  margin: 0.4em 0;
+  color: #4a5568;
+}
+
+.milkdown .ProseMirror li p {
+  margin: 0.2em 0;
+}
+
+/* 任务列表 */
+.milkdown .ProseMirror .task-list-item {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.milkdown .ProseMirror .task-list-item input[type="checkbox"] {
+  margin-top: 0.4em;
+  cursor: pointer;
+}
+
+/* 分隔线 */
+.milkdown .ProseMirror hr {
+  border: none;
+  border-top: 2px solid #cbd5e0;
+  margin: 2em 0;
+}
+
+/* 表格 */
+.milkdown .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  overflow: hidden;
+}
+
+.milkdown .ProseMirror table th,
+.milkdown .ProseMirror table td {
+  border: 1px solid #cbd5e0;
+  padding: 0.6em 1em;
+  text-align: left;
+}
+
+.milkdown .ProseMirror table th {
+  background: #f7fafc;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.milkdown .ProseMirror table tr:nth-child(even) {
+  background: #f7fafc;
+}
+
+/* 图片 */
+.milkdown .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 1em 0;
+  display: block;
+}
+
+/* 数学公式 */
+.milkdown .ProseMirror .katex {
+  font-size: 1.1em;
+}
+
+.milkdown .ProseMirror .katex-display {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Mermaid 图表 */
+.milkdown .ProseMirror .mermaid {
+  margin: 1em 0;
+  text-align: center;
+}
+
+.milkdown .ProseMirror .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 选中状态 */
+.milkdown .ProseMirror ::selection {
+  background: rgba(102, 126, 234, 0.2);
+}
+
+/* 光标 */
+.milkdown .ProseMirror .ProseMirror-focused {
+  outline: none;
+}
+
+/* 占位符 */
+.milkdown .ProseMirror .placeholder {
+  color: #a0aec0;
+  pointer-events: none;
+  height: 0;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  .milkdown {
+    background: #1e1e1e;
+    color: #d4d4d4;
+  }
+
+  .milkdown .ProseMirror h1,
+  .milkdown .ProseMirror h2,
+  .milkdown .ProseMirror h3 {
+    color: #e2e8f0;
+  }
+
+  .milkdown .ProseMirror h4,
+  .milkdown .ProseMirror h5 {
+    color: #cbd5e0;
+  }
+
+  .milkdown .ProseMirror h6 {
+    color: #a0aec0;
+  }
+
+  .milkdown .ProseMirror strong {
+    color: #e2e8f0;
+  }
+
+  .milkdown .ProseMirror em {
+    color: #cbd5e0;
+  }
+
+  .milkdown .ProseMirror code {
+    background-color: rgba(102, 126, 234, 0.2);
+  }
+
+  .milkdown .ProseMirror pre {
+    background: #2d3748;
+  }
+
+  .milkdown .ProseMirror blockquote {
+    border-left-color: #4a5568;
+    color: #a0aec0;
+  }
+
+  .milkdown .ProseMirror table th {
+    background: #2d3748;
+    color: #e2e8f0;
+  }
+
+  .milkdown .ProseMirror table tr:nth-child(even) {
+    background: #2d3748;
+  }
+
+  .milkdown .ProseMirror table th,
+  .milkdown .ProseMirror table td {
+    border-color: #4a5568;
+  }
+
+  .milkdown .ProseMirror hr {
+    border-top-color: #4a5568;
+  }
+}
+
+

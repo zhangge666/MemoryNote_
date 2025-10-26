@@ -11,8 +11,8 @@
     >
       <slot>
         <!-- 默认内容 -->
-        <h3 class="text-sm font-semibold mb-4">属性面板</h3>
-        <p class="text-sm text-text-muted">文档属性将在这里显示</p>
+        <h3 class="text-sm font-semibold mb-4">右侧面板UI插槽</h3>
+        <p class="text-sm text-text-muted">AI助手及插件注册页面可以在此处展示</p>
       </slot>
     </div>
 

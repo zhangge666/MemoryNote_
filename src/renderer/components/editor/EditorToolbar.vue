@@ -1,5 +1,24 @@
 <template>
   <div class="editor-toolbar">
+    <!-- 撤销/重做 -->
+    <div class="toolbar-group">
+      <button class="toolbar-btn" @click="emit('command', 'undo')" :disabled="!canUndo" :title="t('editor.undo')">
+        <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M3 7v6h6"></path>
+          <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
+        </svg>
+      </button>
+      <button class="toolbar-btn" @click="emit('command', 'redo')" :disabled="!canRedo" :title="t('editor.redo')">
+        <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M21 7v6h-6"></path>
+          <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
+    <!-- 文本样式 -->
     <div class="toolbar-group">
       <button class="toolbar-btn" @click="emit('command', 'bold')" :title="t('editor.bold')">
         <strong>B</strong>
@@ -18,13 +37,13 @@
     <div class="toolbar-divider"></div>
 
     <div class="toolbar-group">
-      <button class="toolbar-btn" @click="emit('command', 'heading1')" :title="t('editor.heading1')">
+      <button class="toolbar-btn" @click="emit('command', 'heading-1')" :title="t('editor.heading1')">
         H1
       </button>
-      <button class="toolbar-btn" @click="emit('command', 'heading2')" :title="t('editor.heading2')">
+      <button class="toolbar-btn" @click="emit('command', 'heading-2')" :title="t('editor.heading2')">
         H2
       </button>
-      <button class="toolbar-btn" @click="emit('command', 'heading3')" :title="t('editor.heading3')">
+      <button class="toolbar-btn" @click="emit('command', 'heading-3')" :title="t('editor.heading3')">
         H3
       </button>
     </div>
@@ -32,7 +51,7 @@
     <div class="toolbar-divider"></div>
 
     <div class="toolbar-group">
-      <button class="toolbar-btn" @click="emit('command', 'ul')" :title="t('editor.bulletList')">
+      <button class="toolbar-btn" @click="emit('command', 'unordered-list')" :title="t('editor.bulletList')">
         <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <line x1="8" y1="6" x2="21" y2="6"></line>
           <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -42,7 +61,7 @@
           <line x1="3" y1="18" x2="3.01" y2="18"></line>
         </svg>
       </button>
-      <button class="toolbar-btn" @click="emit('command', 'ol')" :title="t('editor.numberedList')">
+      <button class="toolbar-btn" @click="emit('command', 'ordered-list')" :title="t('editor.numberedList')">
         <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <line x1="10" y1="6" x2="21" y2="6"></line>
           <line x1="10" y1="12" x2="21" y2="12"></line>
@@ -85,6 +104,11 @@
       <button class="toolbar-btn" @click="emit('command', 'table')" :title="t('editor.table')">
         <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"></path>
+        </svg>
+      </button>
+      <button class="toolbar-btn" @click="emit('command', 'hr')" :title="t('editor.hr')">
+        <svg class="toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
         </svg>
       </button>
     </div>
