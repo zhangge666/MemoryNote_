@@ -5,7 +5,9 @@
 import { defineStore } from 'pinia';
 import { computed, watch } from 'vue';
 import { getTabService } from '@renderer/services/TabService';
-import type { Tab, TabGroup, TabSystemState } from '@shared/types/tab';
+import { useDialogStore } from './dialog';
+import { noteService } from '@renderer/services/NoteService';
+import type { Tab, TabSystemState } from '@shared/types/tab';
 
 export const useTabStore = defineStore('tab', () => {
   const tabService = getTabService();
@@ -37,24 +39,219 @@ export const useTabStore = defineStore('tab', () => {
     return tabService.openTab(tab, groupId);
   }
 
-  async function closeTab(tabId: string) {
+  async function closeTab(tabId: string): Promise<boolean> {
+    const tab = tabService.findTabById(tabId);
+    if (!tab) return false;
+
+    // 如果标签有未保存的修改
+    if (tab.isDirty && tab.data?.noteId) {
+      // 检查是否还有其他标签页打开相同的笔记
+      const sameNoteTabs = allTabs.value.filter(
+        t => t.data?.noteId === tab.data?.noteId
+      );
+      
+      // 如果还有其他标签页打开相同的笔记，直接关闭，不询问
+      if (sameNoteTabs.length > 1) {
+        console.log(`📌 还有 ${sameNoteTabs.length - 1} 个标签页打开相同笔记，直接关闭`);
+        return await tabService.closeTab(tabId);
+      }
+      
+      // 这是最后一个打开此笔记的标签页，显示确认对话框
+      const dialogStore = useDialogStore();
+      const result = await dialogStore.showConfirm({
+        title: '未保存的更改',
+        message: `"${tab.title}" 有未保存的更改。你想保存这些更改吗？`,
+        confirmText: '保存',
+        denyText: '不保存',
+        cancelText: '取消',
+        showDeny: true,
+        showCancel: true,
+      });
+
+      if (result === 'cancel') {
+        return false;
+      }
+
+      if (result === 'confirm') {
+        try {
+          const content = tab.data.content || '';
+          await noteService.updateNote({
+            id: tab.data.noteId,
+            content: content,
+          });
+          // 清除所有相同笔记的脏标记
+          tabService.setTabDirty(tabId, false);
+          console.log('✅ Note saved before closing');
+        } catch (error) {
+          console.error('❌ Failed to save note:', error);
+          return false;
+        }
+      } else if (result === 'deny') {
+        // 用户选择不保存，需要恢复所有相同笔记标签页的内容
+        try {
+          // 从文件系统重新读取原始内容
+          const note = await noteService.getNote(tab.data.noteId);
+          if (note) {
+            // 更新所有相同笔记的标签页内容为原始内容
+            for (const group of Object.values(state.groups)) {
+              for (const t of group.tabs) {
+                if (t.data?.noteId === tab.data.noteId) {
+                  t.data = { ...t.data, content: note.content };
+                }
+              }
+            }
+            console.log('🔄 已恢复所有标签页到原始内容');
+          }
+        } catch (error) {
+          console.error('❌ Failed to restore original content:', error);
+        }
+        // 清除所有相同笔记的脏标记
+        tabService.setTabDirty(tabId, false);
+      }
+    }
+
     return await tabService.closeTab(tabId);
   }
 
   async function closeAllTabs(groupId?: string) {
-    await tabService.closeAllTabs(groupId);
+    const targetGroupId = groupId || state.activeGroupId;
+    if (!targetGroupId) return;
+
+    const group = state.groups[targetGroupId];
+    if (!group) return;
+
+    const dirtyTabs = group.tabs.filter((t) => t.isDirty);
+    if (dirtyTabs.length > 0) {
+      const dialogStore = useDialogStore();
+      const tabNames = dirtyTabs.map(t => `"${t.title}"`).join(', ');
+      const result = await dialogStore.showConfirm({
+        title: '未保存的更改',
+        message: `以下标签有未保存的更改：${tabNames}。你想保存这些更改吗？`,
+        confirmText: '全部保存',
+        denyText: '全部不保存',
+        cancelText: '取消',
+        showDeny: true,
+        showCancel: true,
+      });
+
+      if (result === 'cancel') return;
+
+      if (result === 'confirm') {
+        for (const tab of dirtyTabs) {
+          try {
+            if (tab.data?.noteId) {
+              const content = tab.data.content || '';
+              await noteService.updateNote({
+                id: tab.data.noteId,
+                content: content,
+              });
+            }
+          } catch (error) {
+            console.error('❌ Failed to save note:', error);
+          }
+        }
+      }
+    }
+
+    await tabService.closeAllTabs(targetGroupId);
   }
 
   async function closeOtherTabs(tabId: string) {
+    const group = tabService.findGroupByTabId(tabId);
+    if (!group) return;
+
+    const otherTabs = group.tabs.filter((t) => t.id !== tabId);
+    const dirtyTabs = otherTabs.filter((t) => t.isDirty);
+
+    if (dirtyTabs.length > 0) {
+      const dialogStore = useDialogStore();
+      const tabNames = dirtyTabs.map(t => `"${t.title}"`).join(', ');
+      const result = await dialogStore.showConfirm({
+        title: '未保存的更改',
+        message: `以下标签有未保存的更改：${tabNames}。你想保存这些更改吗？`,
+        confirmText: '全部保存',
+        denyText: '全部不保存',
+        cancelText: '取消',
+        showDeny: true,
+        showCancel: true,
+      });
+
+      if (result === 'cancel') return;
+
+      if (result === 'confirm') {
+        for (const tab of dirtyTabs) {
+          try {
+            if (tab.data?.noteId) {
+              const content = tab.data.content || '';
+              await noteService.updateNote({
+                id: tab.data.noteId,
+                content: content,
+              });
+            }
+          } catch (error) {
+            console.error('❌ Failed to save note:', error);
+          }
+        }
+      }
+    }
+
     await tabService.closeOtherTabs(tabId);
   }
 
   async function closeTabsToRight(tabId: string) {
+    const group = tabService.findGroupByTabId(tabId);
+    if (!group) return;
+
+    const tabIndex = group.tabs.findIndex((t) => t.id === tabId);
+    if (tabIndex === -1) return;
+
+    const tabsToClose = group.tabs.slice(tabIndex + 1);
+    const dirtyTabs = tabsToClose.filter((t) => t.isDirty);
+
+    if (dirtyTabs.length > 0) {
+      const dialogStore = useDialogStore();
+      const tabNames = dirtyTabs.map(t => `"${t.title}"`).join(', ');
+      const result = await dialogStore.showConfirm({
+        title: '未保存的更改',
+        message: `以下标签有未保存的更改：${tabNames}。你想保存这些更改吗？`,
+        confirmText: '全部保存',
+        denyText: '全部不保存',
+        cancelText: '取消',
+        showDeny: true,
+        showCancel: true,
+      });
+
+      if (result === 'cancel') return;
+
+      if (result === 'confirm') {
+        for (const tab of dirtyTabs) {
+          try {
+            if (tab.data?.noteId) {
+              const content = tab.data.content || '';
+              await noteService.updateNote({
+                id: tab.data.noteId,
+                content: content,
+              });
+            }
+          } catch (error) {
+            console.error('❌ Failed to save note:', error);
+          }
+        }
+      }
+    }
+
     await tabService.closeTabsToRight(tabId);
   }
 
   function setTabDirty(tabId: string, isDirty: boolean) {
     tabService.setTabDirty(tabId, isDirty);
+  }
+
+  /**
+   * 更新标签页内容（并同步到所有相同noteId的标签）
+   */
+  function updateTabContent(tabId: string, content: string) {
+    tabService.updateTabContent(tabId, content);
   }
 
   function toggleTabPin(tabId: string) {
@@ -161,10 +358,13 @@ export const useTabStore = defineStore('tab', () => {
       
       // 直接使用 window.electronAPI
       if (window.electronAPI) {
-        const savedState = await window.electronAPI.invoke('config:get', 'tabSystemState');
-        console.log('📦 Loaded tab state:', savedState);
+        const response = await window.electronAPI.invoke('config:get', 'tabSystemState');
+        console.log('📦 Loaded tab state:', response);
         
-        if (savedState) {
+        // 处理IPC响应格式
+        const savedState = response?.data || response;
+        
+        if (savedState && typeof savedState === 'object' && 'groups' in savedState) {
           restoreState(savedState as TabSystemState);
           console.log('✅ Tab state restored successfully');
           return true;
@@ -184,7 +384,7 @@ export const useTabStore = defineStore('tab', () => {
   // 监听状态变化，立即保存（无防抖）
   watch(
     () => JSON.stringify({ groups: state.groups, layout: state.layout, activeGroupId: state.activeGroupId }),
-    (newVal, oldVal) => {
+    (_newVal, oldVal) => {
       // 跳过初始加载
       if (oldVal === undefined) return;
       
@@ -209,6 +409,7 @@ export const useTabStore = defineStore('tab', () => {
     closeOtherTabs,
     closeTabsToRight,
     setTabDirty,
+    updateTabContent,
     toggleTabPin,
     activateTab,
     activateGroup,

@@ -100,6 +100,21 @@
 
     <!-- 通知容器 -->
     <NotificationContainer />
+
+    <!-- 确认对话框 -->
+    <ConfirmDialog
+      :visible="dialogStore.confirmDialog.visible"
+      :title="dialogStore.confirmDialog.options.title"
+      :message="dialogStore.confirmDialog.options.message"
+      :confirm-text="dialogStore.confirmDialog.options.confirmText"
+      :cancel-text="dialogStore.confirmDialog.options.cancelText"
+      :deny-text="dialogStore.confirmDialog.options.denyText"
+      :show-cancel="dialogStore.confirmDialog.options.showCancel"
+      :show-deny="dialogStore.confirmDialog.options.showDeny"
+      @confirm="dialogStore.confirm"
+      @cancel="dialogStore.cancel"
+      @deny="dialogStore.deny"
+    />
   </div>
 </template>
 
@@ -112,6 +127,7 @@ import { useCommandStore } from '@renderer/stores/command';
 import { useTabStore } from '@renderer/stores/tab';
 import { useNavigationStore } from '@renderer/stores/navigation';
 import { useThemeStore } from '@renderer/stores/theme';
+import { useDialogStore } from '@renderer/stores/dialog';
 import { getKeybindingService } from '@renderer/services/KeybindingService';
 import { registerDefaultCommands } from '@renderer/services/DefaultCommands';
 import { noteService } from '@renderer/services/NoteService';
@@ -123,6 +139,7 @@ import RightSidebar from './RightSidebar.vue';
 import SplitView from '@renderer/components/tab/SplitView.vue';
 import CommandPalette from '@renderer/components/command/CommandPalette.vue';
 import NotificationContainer from '@renderer/components/notification/NotificationContainer.vue';
+import ConfirmDialog from '@renderer/components/common/ConfirmDialog.vue';
 import FileTree from '@renderer/components/note/FileTree.vue';
 import EmptyState from '@renderer/components/workspace/EmptyState.vue';
 import WelcomeView from '@renderer/views/WelcomeView.vue';
@@ -138,6 +155,7 @@ const commandStore = useCommandStore();
 const tabStore = useTabStore();
 const navigationStore = useNavigationStore();
 const themeStore = useThemeStore();
+const dialogStore = useDialogStore();
 const keybindingService = getKeybindingService();
 
 // 状态栏数据

@@ -12,11 +12,6 @@
       {{ tab.title }}
     </div>
 
-    <!-- 脏标记 -->
-    <div v-if="tab.isDirty" class="tab-dirty-indicator">
-      <div class="dot"></div>
-    </div>
-
     <!-- 固定图标 -->
     <div v-if="tab.isPinned && !tab.isDirty" class="tab-pin-icon">
       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
@@ -24,16 +19,19 @@
       </svg>
     </div>
 
-    <!-- 关闭按钮 -->
-    <button
-      v-if="!tab.isPinned"
-      class="tab-close"
-      @click.stop="handleClose"
-    >
-      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
+    <!-- 关闭按钮/脏标记容器 -->
+    <div v-if="!tab.isPinned" class="tab-action">
+      <!-- 脏标记 -->
+      <div v-if="tab.isDirty" class="tab-dirty-indicator">
+        <div class="dot"></div>
+      </div>
+      <!-- 关闭按钮 -->
+      <button class="tab-close" @click.stop="handleClose">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -124,13 +122,25 @@ function handleContextMenu(event: MouseEvent) {
   font-weight: 500;
 }
 
-.tab-dirty-indicator {
+.tab-action {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.tab-dirty-indicator {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.15s;
 }
 
 .tab-dirty-indicator .dot {
@@ -138,6 +148,11 @@ function handleContextMenu(event: MouseEvent) {
   height: 8px;
   border-radius: 50%;
   background: var(--color-primary);
+}
+
+/* 当hover时隐藏脏标记 */
+.tab-item:hover .tab-dirty-indicator {
+  opacity: 0;
 }
 
 .tab-pin-icon {
@@ -151,7 +166,7 @@ function handleContextMenu(event: MouseEvent) {
 }
 
 .tab-close {
-  flex-shrink: 0;
+  position: absolute;
   width: 20px;
   height: 20px;
   border-radius: 4px;

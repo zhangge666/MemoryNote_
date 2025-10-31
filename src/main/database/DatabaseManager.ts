@@ -74,15 +74,85 @@ export class DatabaseManager implements IDatabaseManager {
    */
   async initialize(): Promise<void> {
     try {
-      // 创建数据库连接
+      // 尝试打开数据库
       this.db = new Database(this.dbPath);
 
+      // 检查数据库完整性
+      try {
+        const integrityCheck = this.db.pragma('integrity_check', { simple: true });
+        if (integrityCheck !== 'ok') {
+          console.warn('⚠️ Database integrity check failed:', integrityCheck);
+          console.log('🔧 Attempting to recover database...');
+          
+          // 尝试恢复
+          await this.recoverDatabase();
+        }
+      } catch (checkError) {
+        console.error('❌ Database is corrupted, attempting recovery...');
+        await this.recoverDatabase();
+      }
+
+      // 启用 WAL 模式以提高并发性能，防止锁定问题
+      const walMode = this.db.pragma('journal_mode = WAL', { simple: true });
+      console.log('📊 Journal mode set to:', walMode);
+      
       // 启用外键约束
       this.db.pragma('foreign_keys = ON');
       
+      // 设置忙碌超时（3秒）
+      this.db.pragma('busy_timeout = 3000');
+      
+      // 设置同步模式为NORMAL（更好的性能）
+      this.db.pragma('synchronous = NORMAL');
+      
       // 运行迁移
       await this.runMigrations();
+      
+      console.log('✅ Database initialized with WAL mode');
     } catch (error) {
+      console.error('❌ Failed to initialize database:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 恢复损坏的数据库
+   */
+  private async recoverDatabase(): Promise<void> {
+    try {
+      console.log('🔧 Starting database recovery...');
+      
+      // 关闭当前连接
+      if (this.db) {
+        this.db.close();
+        this.db = null;
+      }
+
+      // 备份损坏的数据库
+      const fs = await import('fs');
+      const path = await import('path');
+      const backupPath = this.dbPath + '.corrupted.' + Date.now();
+      
+      if (fs.existsSync(this.dbPath)) {
+        fs.copyFileSync(this.dbPath, backupPath);
+        console.log('💾 Corrupted database backed up to:', backupPath);
+        
+        // 删除损坏的数据库和相关文件
+        fs.unlinkSync(this.dbPath);
+        
+        // 删除WAL和SHM文件
+        const walPath = this.dbPath + '-wal';
+        const shmPath = this.dbPath + '-shm';
+        if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+        if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+      }
+
+      // 创建新的数据库
+      this.db = new Database(this.dbPath);
+      console.log('✅ New database created');
+      
+    } catch (error) {
+      console.error('❌ Database recovery failed:', error);
       throw error;
     }
   }
@@ -311,7 +381,14 @@ export class DatabaseManager implements IDatabaseManager {
         version: 3,
         name: 'remove_content_from_notes',
         sql: `
-          -- 移除 content 字段，改为从文件系统读取
+          -- ⚠️ 重要：必须先删除触发器和FTS表，再操作notes表
+          -- 1. 删除旧的 FTS 表和触发器（必须在删除notes表之前）
+          DROP TRIGGER IF EXISTS notes_fts_insert;
+          DROP TRIGGER IF EXISTS notes_fts_update;
+          DROP TRIGGER IF EXISTS notes_fts_delete;
+          DROP TABLE IF EXISTS notes_fts;
+
+          -- 2. 移除 content 字段，改为从文件系统读取
           -- 创建新表（不包含 content 字段）
           CREATE TABLE notes_new (
             id TEXT PRIMARY KEY,
@@ -329,51 +406,44 @@ export class DatabaseManager implements IDatabaseManager {
             FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
           );
 
-          -- 迁移数据（不包括 content）
+          -- 3. 迁移数据（不包括 content）
           INSERT INTO notes_new (id, title, file_path, folder_id, excerpt, is_pinned, is_archived, is_favorite, word_count, created_at, updated_at, accessed_at)
           SELECT id, title, file_path, folder_id, excerpt, is_pinned, is_archived, is_favorite, word_count, created_at, updated_at, accessed_at
           FROM notes;
 
-          -- 删除旧表
+          -- 4. 删除旧表
           DROP TABLE notes;
 
-          -- 重命名新表
+          -- 5. 重命名新表
           ALTER TABLE notes_new RENAME TO notes;
 
-          -- 重建索引
+          -- 6. 重建索引
           CREATE INDEX IF NOT EXISTS idx_notes_folder_id ON notes(folder_id);
           CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC);
           CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updated_at DESC);
           CREATE INDEX IF NOT EXISTS idx_notes_is_pinned ON notes(is_pinned);
           CREATE INDEX IF NOT EXISTS idx_notes_is_archived ON notes(is_archived);
 
-          -- 删除旧的 FTS 表和触发器
-          DROP TRIGGER IF EXISTS notes_fts_insert;
-          DROP TRIGGER IF EXISTS notes_fts_update;
-          DROP TRIGGER IF EXISTS notes_fts_delete;
-          DROP TABLE IF EXISTS notes_fts;
-
-          -- 重建 FTS 表（只索引标题和摘要，不索引内容）
+          -- 7. 重建 FTS 表（只索引标题和摘要，不索引内容）
+          -- 使用独立的FTS表，不使用external content
           CREATE VIRTUAL TABLE notes_fts USING fts5(
             title,
-            excerpt,
-            content='notes',
-            content_rowid='rowid'
+            excerpt
           );
 
-          -- 新触发器：插入笔记时同步到 FTS
+          -- 8. 新触发器：插入笔记时同步到 FTS
           CREATE TRIGGER notes_fts_insert AFTER INSERT ON notes BEGIN
             INSERT INTO notes_fts(rowid, title, excerpt)
-            VALUES (NEW.rowid, NEW.title, NEW.excerpt);
+            VALUES (NEW.rowid, NEW.title, COALESCE(NEW.excerpt, ''));
           END;
 
-          -- 新触发器：更新笔记时同步到 FTS
+          -- 9. 新触发器：更新笔记时同步到 FTS
           CREATE TRIGGER notes_fts_update AFTER UPDATE ON notes BEGIN
-            UPDATE notes_fts SET title = NEW.title, excerpt = NEW.excerpt
+            UPDATE notes_fts SET title = NEW.title, excerpt = COALESCE(NEW.excerpt, '')
             WHERE rowid = NEW.rowid;
           END;
 
-          -- 新触发器：删除笔记时同步到 FTS
+          -- 10. 新触发器：删除笔记时同步到 FTS
           CREATE TRIGGER notes_fts_delete AFTER DELETE ON notes BEGIN
             DELETE FROM notes_fts WHERE rowid = OLD.rowid;
           END;
@@ -393,7 +463,11 @@ export class DatabaseManager implements IDatabaseManager {
     try {
       const stmt = this.db.prepare(sql);
       return stmt.all(...params) as T[];
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[DB Query] Failed!');
+      console.error('[DB Query] SQL:', sql);
+      console.error('[DB Query] Params:', params);
+      console.error('[DB Query] Error:', error.message);
       throw error;
     }
   }
@@ -424,13 +498,24 @@ export class DatabaseManager implements IDatabaseManager {
     }
 
     try {
+      console.log('[DB Execute] SQL:', sql.substring(0, 100) + (sql.length > 100 ? '...' : ''));
+      console.log('[DB Execute] Params:', JSON.stringify(params).substring(0, 200));
+      
       const stmt = this.db.prepare(sql);
       const result = stmt.run(...params);
+      
+      console.log('[DB Execute] Success - Changes:', result.changes);
+      
       return {
         changes: result.changes,
         lastID: result.lastInsertRowid as number,
       };
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[DB Execute] Failed!');
+      console.error('[DB Execute] SQL:', sql);
+      console.error('[DB Execute] Params:', params);
+      console.error('[DB Execute] Error:', error.message);
+      console.error('[DB Execute] Error Code:', error.code);
       throw error;
     }
   }
@@ -459,19 +544,27 @@ export class DatabaseManager implements IDatabaseManager {
 
   /**
    * 执行事务
+   * 注意：better-sqlite3 的事务是同步的，不支持异步回调
    */
-  async transaction<T>(callback: () => Promise<T>): Promise<T> {
+  async transaction<T>(callback: () => T | Promise<T>): Promise<T> {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
 
-    const transaction = this.db.transaction(async () => {
-      return await callback();
-    });
-
     try {
-      return transaction();
+      // better-sqlite3 事务必须是同步的
+      const transaction = this.db.transaction(() => {
+        const result = callback();
+        // 如果返回的是 Promise，需要等待它完成
+        if (result instanceof Promise) {
+          throw new Error('Transaction callback must be synchronous. Use executeBatch for multiple operations.');
+        }
+        return result;
+      });
+
+      return transaction() as T;
     } catch (error) {
+      console.error('Transaction failed:', error);
       throw error;
     }
   }
@@ -481,8 +574,46 @@ export class DatabaseManager implements IDatabaseManager {
    */
   async close(): Promise<void> {
     if (this.db) {
+      try {
+        // 优化WAL检查点
+        this.db.pragma('wal_checkpoint(TRUNCATE)');
+      } catch (error) {
+        console.warn('Failed to checkpoint WAL:', error);
+      }
       this.db.close();
       this.db = null;
+    }
+  }
+
+  /**
+   * 手动触发数据库重建（清空所有数据）
+   */
+  async rebuild(): Promise<void> {
+    try {
+      console.log('🔄 Rebuilding database...');
+      
+      // 关闭当前连接
+      await this.close();
+      
+      // 删除数据库文件
+      const fs = await import('fs');
+      if (fs.existsSync(this.dbPath)) {
+        fs.unlinkSync(this.dbPath);
+      }
+      
+      // 删除WAL和SHM文件
+      const walPath = this.dbPath + '-wal';
+      const shmPath = this.dbPath + '-shm';
+      if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+      if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+      
+      // 重新初始化
+      await this.initialize();
+      
+      console.log('✅ Database rebuilt successfully');
+    } catch (error) {
+      console.error('❌ Failed to rebuild database:', error);
+      throw error;
     }
   }
 
@@ -505,6 +636,16 @@ export const getInstance = (): DatabaseManager => {
     instance = new DatabaseManager();
   }
   return instance;
+};
+
+/**
+ * 重置单例（用于工作区切换）
+ */
+export const resetInstance = async (): Promise<void> => {
+  if (instance) {
+    await instance.close();
+    instance = null;
+  }
 };
 
 /**

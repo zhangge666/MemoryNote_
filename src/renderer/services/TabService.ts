@@ -145,15 +145,11 @@ export class TabService implements ITabService {
 
   /**
    * 关闭标签页
+   * 注意：此方法不处理未保存确认，确认逻辑应在调用层（如TabStore）处理
    */
   async closeTab(tabId: string): Promise<boolean> {
     const tab = this.findTabById(tabId);
     if (!tab) return false;
-
-    // 如果有未保存的修改，需要确认
-    if (tab.isDirty) {
-      // TODO: 显示确认对话框
-    }
 
     const group = this.findGroupByTabId(tabId);
     if (!group) return false;
@@ -348,6 +344,61 @@ export class TabService implements ITabService {
     const tab = this.findTabById(tabId);
     if (tab) {
       tab.isDirty = isDirty;
+      
+      // 如果是编辑器标签且有笔记ID，同步更新所有相同笔记的标签
+      if (tab.data && typeof tab.data === 'object' && 'noteId' in tab.data) {
+        this.setTabDirtyByNoteId(tab.data.noteId as string, isDirty);
+      } else if (tab.filePath) {
+        // 如果有文件路径，同步更新所有相同文件路径的标签
+        this.setTabDirtyByFilePath(tab.filePath, isDirty);
+      }
+    }
+  }
+
+  /**
+   * 更新标签页内容（并同步到所有相同noteId的标签）
+   */
+  updateTabContent(tabId: string, content: string): void {
+    const tab = this.findTabById(tabId);
+    if (!tab || !tab.data) return;
+
+    const noteId = tab.data.noteId;
+    if (!noteId) return;
+
+    // 更新所有相同noteId的标签内容
+    for (const group of Object.values(this.state.groups)) {
+      for (const t of group.tabs) {
+        if (t.data?.noteId === noteId) {
+          // 强制触发响应式更新：重新创建data对象
+          t.data = { ...t.data, content };
+        }
+      }
+    }
+  }
+
+  /**
+   * 根据笔记ID设置所有相关标签的脏状态
+   */
+  private setTabDirtyByNoteId(noteId: string, isDirty: boolean): void {
+    for (const group of Object.values(this.state.groups)) {
+      for (const tab of group.tabs) {
+        if (tab.data && typeof tab.data === 'object' && 'noteId' in tab.data && tab.data.noteId === noteId) {
+          tab.isDirty = isDirty;
+        }
+      }
+    }
+  }
+
+  /**
+   * 根据文件路径设置所有相关标签的脏状态
+   */
+  private setTabDirtyByFilePath(filePath: string, isDirty: boolean): void {
+    for (const group of Object.values(this.state.groups)) {
+      for (const tab of group.tabs) {
+        if (tab.filePath === filePath) {
+          tab.isDirty = isDirty;
+        }
+      }
     }
   }
 

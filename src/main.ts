@@ -37,6 +37,10 @@ async function initializeServices() {
 
     // 初始化文件监听服务
     fileWatcherService = new FileWatcherService(fileSystemService, noteService);
+    
+    // 将文件监听器注入到文件系统服务中（防止循环更新）
+    fileSystemService.setFileWatcher(fileWatcherService);
+    
     fileWatcherService.start();
 
     // 注册 IPC 处理器
@@ -58,9 +62,9 @@ async function cleanupServices() {
       await fileWatcherService.stop();
     }
     
-    // 关闭数据库
+    // 关闭数据库（异步）
     if (dbManager) {
-      dbManager.close();
+      await dbManager.close();
     }
     
     console.log('✅ Services cleaned up');
@@ -89,6 +93,10 @@ async function reinitializeServices() {
     
     // 重新初始化文件监听服务
     fileWatcherService = new FileWatcherService(fileSystemService, noteService);
+    
+    // 将文件监听器注入到文件系统服务中（防止循环更新）
+    fileSystemService.setFileWatcher(fileWatcherService);
+    
     fileWatcherService.start();
     
     // 更新笔记处理器的服务实例（不重新注册handlers）

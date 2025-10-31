@@ -19,9 +19,25 @@ const readdir = promisify(fs.readdir);
 
 export class FileSystemService {
   private notesDir: string;
+  private fileWatcher: any = null; // FileWatcherService reference (avoid circular dependency)
 
   constructor() {
     // 从配置中读取工作区路径
+    this.notesDir = this.getWorkspaceNotesDir();
+    this.ensureNotesDir();
+  }
+
+  /**
+   * 设置文件监听器引用（用于防止循环更新）
+   */
+  setFileWatcher(fileWatcher: any) {
+    this.fileWatcher = fileWatcher;
+  }
+
+  /**
+   * 更新笔记目录（用于工作区切换）
+   */
+  updateNotesDir() {
     this.notesDir = this.getWorkspaceNotesDir();
     this.ensureNotesDir();
   }
@@ -105,6 +121,11 @@ export class FileSystemService {
     const dirPath = path.dirname(absolutePath);
 
     try {
+      // 通知文件监听器忽略即将发生的变化
+      if (this.fileWatcher && typeof this.fileWatcher.ignoreNextChangeFor === 'function') {
+        this.fileWatcher.ignoreNextChangeFor(filePath);
+      }
+
       // 确保目录存在
       if (!fs.existsSync(dirPath)) {
         await mkdir(dirPath, { recursive: true });
